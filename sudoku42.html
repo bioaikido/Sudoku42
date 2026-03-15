@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌺 Sudoku42</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@400;600;700;800&display=swap');
+
+  :root { --gold:#f5c842; --sunset:#f97316; --hibiscus:#e8394d; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  body {
+    font-family:'Nunito',sans-serif;
+    background:linear-gradient(160deg,#0a7ea4 0%,#0e5a7a 40%,#1a3a5c 100%);
+    min-height:100vh; overflow-x:hidden; position:relative;
+  }
+  body::before {
+    content:''; position:fixed; bottom:0; left:0; right:0; height:180px;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 180'%3E%3Cpath fill='%23f5e6c8' fill-opacity='0.15' d='M0,96L48,106.7C96,117,192,139,288,138.7C384,139,480,117,576,101.3C672,85,768,75,864,85.3C960,96,1056,128,1152,133.3C1248,139,1344,117,1392,106.7L1440,96L1440,180L0,180Z'/%3E%3C/svg%3E") no-repeat bottom;
+    background-size:cover; pointer-events:none; z-index:0;
+  }
+
+  #lang-switcher {
+    position:fixed; top:14px; right:16px; z-index:50;
+    display:flex; gap:4px;
+    background:rgba(255,255,255,0.12); backdrop-filter:blur(8px);
+    border-radius:20px; padding:4px; border:1px solid rgba(255,255,255,0.2);
+  }
+  .lang-btn {
+    padding:4px 12px; border-radius:16px; border:none;
+    background:transparent; color:rgba(255,255,255,0.6);
+    font-family:'Nunito',sans-serif; font-size:0.8rem; font-weight:700;
+    cursor:pointer; transition:background 0.2s,color 0.2s;
+  }
+  .lang-btn.active{ background:var(--gold); color:#333; }
+  .lang-btn:hover:not(.active){ color:#fff; }
+
+  #app {
+    position:relative; z-index:1;
+    max-width:900px; margin:0 auto; padding:12px 8px;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+  }
+  h1 {
+    font-family:'Pacifico',cursive; color:var(--gold);
+    font-size:clamp(1.3rem,5vw,2rem);
+    text-shadow:2px 3px 8px rgba(0,0,0,0.4); text-align:center;
+    padding-right:80px;
+  }
+  #scoreboard {
+    display:flex; gap:12px;
+    background:rgba(255,255,255,0.12); backdrop-filter:blur(8px);
+    border-radius:20px; padding:8px 16px;
+    border:1.5px solid rgba(255,255,255,0.2);
+  }
+  .score-item{ text-align:center; }
+  .score-label{ font-size:clamp(0.55rem,1.8vw,0.65rem); color:rgba(255,255,255,0.7); text-transform:uppercase; letter-spacing:1px; }
+  .score-val{ font-size:clamp(1.2rem,4vw,1.6rem); font-weight:800; line-height:1; }
+  .score-val.player{ color:#7effc0; }
+  .score-val.cpu   { color:#ff8fa3; }
+  .score-val.deck  { color:#fff; }
+
+  #status-bar {
+    background:rgba(0,0,0,0.3); border-radius:12px;
+    padding:6px 14px; color:#fff;
+    font-size:clamp(0.72rem,2.5vw,0.85rem); font-weight:600;
+    text-align:center; width:100%; max-width:760px;
+    border:1px solid rgba(255,255,255,0.15); transition:background 0.3s;
+  }
+  #status-bar.good{ background:rgba(46,160,67,0.55); }
+  #status-bar.warn{ background:rgba(232,57,77,0.45); }
+  #status-bar.bump{ background:rgba(200,120,0,0.55); }
+
+  /* ── Sizing ── */
+  :root{ --cw:50px; --ch:60px; --hcs:48px; }
+  @media(max-width:560px){
+    :root{
+      --cw:calc((100vw - 52px)/9);
+      --ch:calc((100vw - 52px)/9 * 1.2);
+      --hcs:calc((100vw - 52px)/9);
+    }
+  }
+
+  /* ── Board ── */
+  #board-wrap {
+    background:rgba(255,255,255,0.07); backdrop-filter:blur(6px);
+    border-radius:16px; padding:10px;
+    border:2px solid rgba(255,255,255,0.22);
+    position:relative; flex-shrink:0;
+  }
+  #board {
+    display:grid;
+    grid-template-columns:repeat(9,var(--cw));
+    grid-template-rows:repeat(9,var(--ch));
+    gap:2px;
+  }
+  .cell {
+    width:var(--cw); height:var(--ch);
+    background:rgba(255,255,255,0.07); border-radius:4px;
+    border:1px solid rgba(255,255,255,0.12);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:background 0.15s;
+  }
+  .cell.box-right { border-right:3px solid rgba(255,255,255,0.6)!important; }
+  .cell.box-bottom{ border-bottom:3px solid rgba(255,255,255,0.6)!important; }
+  .cell:hover{ background:rgba(255,255,255,0.16); }
+  .cell.highlight{ background:rgba(245,200,66,0.04); }
+  .cell.highlight:not(.box-right):not(.box-bottom){ border-color:rgba(245,200,66,0.3); }
+  .cell.highlight.box-right { border-right-color:rgba(255,255,255,0.6); }
+  .cell.highlight.box-bottom{ border-bottom-color:rgba(255,255,255,0.6); }
+  .cell.drop-ok { background:rgba(126,255,192,0.2); border:2px solid #7effc0!important; }
+  .cell.drop-bad{ background:rgba(232,57,77,0.2);   border:2px solid var(--hibiscus)!important; }
+
+  /* ── Board cover (pause) ── */
+  #board-cover {
+    display:none; position:absolute; inset:0;
+    background:rgba(255,255,255,0.45);
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
+    border-radius:14px; z-index:10;
+    border:1px solid rgba(255,255,255,0.6);
+    align-items:center; justify-content:center;
+  }
+  #board-cover.show{ display:flex; }
+  #board-cover span{ font-size:2rem; opacity:0.45; }
+
+  /* ── Board cards ── */
+  .board-card {
+    width:calc(var(--cw) - 6px); height:calc(var(--ch) - 6px);
+    border-radius:5px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:clamp(0.95rem,calc(var(--cw)*0.54),1.55rem);
+    font-weight:900; line-height:1; letter-spacing:-0.02em;
+    color:#fff; cursor:grab; user-select:none;
+    border:2px solid rgba(255,255,255,0.38);
+    transition:transform 0.12s,box-shadow 0.12s;
+    text-shadow:0 1px 3px rgba(0,0,0,0.35);
+  }
+  .board-card:active{ cursor:grabbing; }
+  .board-card.dragging{ opacity:0.35; transform:scale(0.87); }
+  .board-card.v1,.board-card.v2,.board-card.v3{ background:linear-gradient(150deg,#f0c93a,#c8880e); box-shadow:0 2px 7px rgba(0,0,0,0.3); }
+  .board-card.v4,.board-card.v5,.board-card.v6{ background:linear-gradient(150deg,#e05a42,#a82818); box-shadow:0 2px 7px rgba(0,0,0,0.3); }
+  .board-card.v7,.board-card.v8,.board-card.v9{ background:linear-gradient(150deg,#3d86d4,#1a52a0); box-shadow:0 2px 7px rgba(0,0,0,0.3); }
+  .board-card.locked{
+    background:linear-gradient(150deg,#7a8a95,#4a5a65)!important;
+    cursor:default; border-color:rgba(255,255,255,0.3)!important; opacity:0.75;
+  }
+
+  /* ── Hands ── */
+  #computer-area,#player-area{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+  }
+  .area-label{ color:rgba(255,255,255,0.65); font-size:0.7rem; text-transform:uppercase; letter-spacing:1.5px; }
+  #player-hand,#computer-hand{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; max-width:96vw; }
+
+  .hand-card {
+    width:var(--hcs); height:calc(var(--hcs)*1.36);
+    border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:clamp(1rem,calc(var(--hcs)*0.58),1.85rem);
+    font-weight:900; line-height:1; color:#fff; cursor:grab; user-select:none;
+    border:2.5px solid rgba(255,255,255,0.45);
+    box-shadow:0 3px 10px rgba(0,0,0,0.3);
+    transition:transform 0.15s,box-shadow 0.15s;
+    text-shadow:0 1px 3px rgba(0,0,0,0.35);
+  }
+  .hand-card.v1,.hand-card.v2,.hand-card.v3{ background:linear-gradient(150deg,#f0c93a,#c8880e); }
+  .hand-card.v4,.hand-card.v5,.hand-card.v6{ background:linear-gradient(150deg,#e05a42,#a82818); }
+  .hand-card.v7,.hand-card.v8,.hand-card.v9{ background:linear-gradient(150deg,#3d86d4,#1a52a0); }
+  .hand-card:hover{ transform:translateY(-7px); box-shadow:0 9px 22px rgba(0,0,0,0.4); }
+  .hand-card.dragging{ opacity:0.28; transform:scale(0.84); }
+
+  .cpu-hand-card {
+    width:var(--hcs); height:calc(var(--hcs)*1.36); border-radius:8px;
+    background:linear-gradient(135deg,#7b1fa2,#ab47bc);
+    border:2.5px solid rgba(255,255,255,0.25); box-shadow:0 3px 10px rgba(0,0,0,0.3);
+    display:flex; align-items:center; justify-content:center;
+    font-size:clamp(1rem,calc(var(--hcs)*0.55),1.7rem); color:rgba(255,255,255,0.15);
+  }
+
+  /* ── Bumped slot ── */
+  #player-row{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:center; }
+  #bumped-slot{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+  #bumped-label{ color:var(--gold); font-size:0.65rem; text-transform:uppercase; letter-spacing:1.2px; font-weight:800; }
+  .bumped-card {
+    width:calc(var(--hcs)*1.3); height:calc(var(--hcs)*1.3*1.36);
+    border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-size:clamp(1.2rem,calc(var(--hcs)*0.75),2.4rem);
+    font-weight:900; line-height:1; color:#fff; cursor:grab; user-select:none;
+    border:3px solid rgba(255,255,255,0.75);
+    box-shadow:0 0 20px rgba(245,200,66,0.65),0 4px 14px rgba(0,0,0,0.4);
+    animation:bumpPulse 1s ease-in-out infinite alternate;
+    transition:transform 0.15s; text-shadow:0 1px 3px rgba(0,0,0,0.35);
+  }
+  .bumped-card.v1,.bumped-card.v2,.bumped-card.v3{ background:linear-gradient(150deg,#f0c93a,#c8880e); }
+  .bumped-card.v4,.bumped-card.v5,.bumped-card.v6{ background:linear-gradient(150deg,#e05a42,#a82818); }
+  .bumped-card.v7,.bumped-card.v8,.bumped-card.v9{ background:linear-gradient(150deg,#3d86d4,#1a52a0); }
+  .bumped-card:hover{ transform:translateY(-6px); }
+  .bumped-card.dragging{ opacity:0.3; transform:scale(0.85); }
+  @keyframes bumpPulse{
+    0%{ box-shadow:0 0 12px rgba(245,200,66,0.5),0 4px 14px rgba(0,0,0,0.4); }
+    100%{ box-shadow:0 0 28px rgba(245,200,66,0.9),0 4px 14px rgba(0,0,0,0.4); }
+  }
+
+  /* ── End turn button ── */
+  #end-turn-btn {
+    padding:11px 32px;
+    background:linear-gradient(135deg,var(--sunset),#e8394d);
+    color:#fff; border:none; border-radius:30px;
+    font-family:'Nunito',sans-serif; font-size:0.95rem; font-weight:800;
+    cursor:pointer; box-shadow:0 4px 14px rgba(232,57,77,0.38);
+    transition:transform 0.13s,box-shadow 0.13s;
+  }
+  #end-turn-btn:hover:not(:disabled){ transform:translateY(-2px); box-shadow:0 7px 20px rgba(232,57,77,0.48); }
+  #end-turn-btn:disabled{ opacity:0.38; cursor:default; transform:none; }
+
+  /* ── Overlay ── */
+  #overlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,0.72); backdrop-filter:blur(8px);
+    z-index:100; align-items:center; justify-content:center; flex-direction:column;
+  }
+  #overlay.show{ display:flex; }
+  #overlay-box {
+    background:linear-gradient(160deg,#0a7ea4,#054d66);
+    border:2px solid rgba(255,255,255,0.22); border-radius:24px;
+    padding:clamp(20px,5vw,36px) clamp(18px,6vw,48px); text-align:center;
+    box-shadow:0 20px 60px rgba(0,0,0,0.6); max-width:min(500px,92vw); margin:0 16px;
+  }
+  #overlay-title{ font-family:'Pacifico',cursive; font-size:1.9rem; color:var(--gold); margin-bottom:10px; }
+  #overlay-score{ font-size:1rem; color:rgba(255,255,255,0.88); margin-bottom:14px; }
+  #dancers{ font-size:3rem; margin-bottom:6px; line-height:1.3; animation:sway 0.9s ease-in-out infinite alternate; }
+  @keyframes sway{ 0%{transform:rotate(-5deg) scale(1)} 100%{transform:rotate(5deg) scale(1.05)} }
+  #dance-text{ color:rgba(255,255,255,0.72); font-size:0.88rem; margin-bottom:22px; font-style:italic; }
+  #restart-btn {
+    padding:11px 36px; background:var(--gold); color:#333;
+    border:none; border-radius:30px;
+    font-family:'Nunito',sans-serif; font-size:0.95rem; font-weight:800;
+    cursor:pointer; transition:transform 0.13s;
+  }
+  #restart-btn:hover{ transform:scale(1.06); }
+
+  /* ── Log ── */
+  #log {
+    background:rgba(0,0,0,0.22); border-radius:10px;
+    padding:6px 12px; width:100%; max-height:70px; overflow-y:auto;
+    font-size:0.73rem; color:rgba(255,255,255,0.7);
+    border:1px solid rgba(255,255,255,0.1);
+  }
+  #log div{ padding:1px 0; }
+  #log div:first-child{ color:#fff; }
+
+  /* ── Footer ── */
+  #footer{ font-size:0.72rem; color:rgba(255,255,255,0.45); text-align:center; margin-top:4px; }
+  #footer a{ color:rgba(255,255,255,0.6); text-decoration:none; border-bottom:1px solid rgba(255,255,255,0.3); transition:color 0.2s; }
+  #footer a:hover{ color:var(--gold); border-bottom-color:var(--gold); }
+
+  /* ── Flash & Ghost ── */
+  .point-flash {
+    position:fixed; font-family:'Pacifico',cursive; font-size:2.2rem;
+    color:var(--gold); text-shadow:0 0 18px rgba(245,200,66,0.7);
+    pointer-events:none; z-index:200; animation:ptAnim 1.2s ease forwards;
+  }
+  @keyframes ptAnim{
+    0%{transform:translateY(0) scale(0.5);opacity:0}
+    30%{transform:translateY(-28px) scale(1.2);opacity:1}
+    80%{transform:translateY(-75px) scale(1);opacity:1}
+    100%{transform:translateY(-110px) scale(0.8);opacity:0}
+  }
+  #drag-ghost {
+    position:fixed; pointer-events:none; z-index:999;
+    width:50px; height:60px; border-radius:6px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.4rem; font-weight:900; color:#fff;
+    border:2px solid rgba(255,255,255,0.6); box-shadow:0 6px 20px rgba(0,0,0,0.5);
+    opacity:0; transform:translate(-50%,-50%); transition:opacity 0.1s;
+  }
+  #drag-ghost.visible{ opacity:0.9; }
+  #drag-ghost.from-hand  { background:linear-gradient(150deg,#e8c13a,#c8880e); }
+  #drag-ghost.from-board { background:linear-gradient(150deg,#3d86d4,#1a52a0); }
+  #drag-ghost.from-bumped{ background:linear-gradient(150deg,#e05a42,#a82818); }
+
+  /* ── Clock animations ── */
+  @keyframes clockPulse{ 0%{transform:scale(1)} 100%{transform:scale(1.04)} }
+
+  /* ── Time modal ── */
+  #time-modal {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,0.75); backdrop-filter:blur(8px);
+    z-index:200; align-items:center; justify-content:center;
+  }
+  #time-modal.show{ display:flex; }
+  #time-modal-box {
+    background:linear-gradient(160deg,#0a7ea4,#054d66);
+    border:2px solid rgba(255,255,255,0.22); border-radius:24px;
+    padding:28px 32px; text-align:center;
+    box-shadow:0 20px 60px rgba(0,0,0,0.6); max-width:min(440px,92vw); width:100%;
+  }
+  #time-modal-box h2{ font-family:'Pacifico',cursive; color:var(--gold); font-size:1.4rem; margin-bottom:16px; }
+  .time-presets{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; }
+  .time-preset-btn {
+    padding:10px 6px; background:rgba(255,255,255,0.1);
+    border:1.5px solid rgba(255,255,255,0.2); border-radius:12px;
+    color:#fff; cursor:pointer; font-family:'Nunito',sans-serif; font-size:0.9rem; font-weight:700;
+    transition:background 0.18s,border-color 0.18s,transform 0.13s;
+  }
+  .time-preset-btn:hover{ background:rgba(255,255,255,0.2); border-color:var(--gold); transform:scale(1.03); }
+  .pname{ font-size:0.68rem; color:rgba(255,255,255,0.55); display:block; margin-top:2px; }
+  .time-custom-row{
+    display:flex; gap:8px; align-items:center; margin-bottom:12px;
+    background:rgba(255,255,255,0.08); border-radius:12px; padding:10px 14px; flex-wrap:wrap;
+  }
+  .time-custom-row input{
+    width:58px; padding:5px 8px; border-radius:8px;
+    border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.15);
+    color:#fff; font-family:'Nunito',sans-serif; font-size:0.9rem; font-weight:700; text-align:center;
+  }
+  .time-custom-row input:focus{ outline:none; border-color:var(--gold); }
+  .time-no-limit-btn {
+    width:100%; padding:9px; margin-bottom:0;
+    background:rgba(255,255,255,0.08); border:1.5px solid rgba(255,255,255,0.2);
+    border-radius:12px; color:rgba(255,255,255,0.7); cursor:pointer;
+    font-family:'Nunito',sans-serif; font-size:0.88rem; font-weight:700; transition:background 0.18s;
+  }
+  .time-no-limit-btn:hover{ background:rgba(255,255,255,0.15); color:#fff; }
+
+  /* ── Pause button ── */
+  .pause-btn {
+    background:rgba(255,255,255,0.15); border:1.5px solid rgba(255,255,255,0.3);
+    border-radius:50%; width:34px; height:34px;
+    color:#fff; font-size:0.95rem; cursor:pointer;
+    transition:background 0.2s,transform 0.15s; flex-shrink:0;
+  }
+  .pause-btn:hover{ background:rgba(255,255,255,0.28); transform:scale(1.1); }
+  .pause-btn.paused{ background:rgba(245,200,66,0.3); border-color:var(--gold); color:var(--gold); }
+
+  /* ── Pause overlay ── */
+  #pause-overlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,0.65); backdrop-filter:blur(10px);
+    z-index:150; align-items:center; justify-content:center;
+  }
+  #pause-overlay.show{ display:flex; }
+  #pause-overlay-box{ text-align:center; display:flex; flex-direction:column; align-items:center; gap:20px; }
+  #pause-overlay-box .pause-icon{ font-size:4rem; line-height:1; }
+  #pause-overlay-box h2{ font-family:'Pacifico',cursive; color:var(--gold); font-size:2rem; text-shadow:2px 3px 8px rgba(0,0,0,0.4); }
+  #pause-overlay-box .resume-btn {
+    padding:12px 40px; background:linear-gradient(135deg,var(--sunset),#e8394d);
+    color:#fff; border:none; border-radius:30px;
+    font-family:'Nunito',sans-serif; font-size:1rem; font-weight:800;
+    cursor:pointer; box-shadow:0 4px 16px rgba(232,57,77,0.4); transition:transform 0.15s;
+  }
+  #pause-overlay-box .resume-btn:hover{ transform:scale(1.05); }
+
+  /* ── Desktop clock in side panel ── */
+  .clock{
+    font-family:'Pacifico',cursive; font-size:1.35rem; line-height:1; letter-spacing:1px;
+    padding:6px 10px; border-radius:10px; width:100%; text-align:center;
+    transition:background 0.3s,color 0.3s; border:2px solid rgba(255,255,255,0.2);
+    display:none;
+  }
+  .clock.show{ display:block; }
+  .clock.active-clock{ background:rgba(46,160,67,0.35); border-color:#7effc0; color:#7effc0; }
+  .clock.idle-clock  { background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.45); }
+  .clock.low-clock   { background:rgba(232,57,77,0.45); border-color:#ff6b7a; color:#fff;
+                       animation:clockPulse 0.8s ease-in-out infinite alternate; }
+
+  /* ── Mobile timer bar ── */
+  #mobile-timer-bar {
+    display: none;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    gap: 8px;
+  }
+  #mobile-timer-bar.show { display: flex; }
+  @media (min-width: 600px) { #mobile-timer-bar { display: none !important; } }
+
+  #mob-clock-display {
+    font-family: 'Pacifico', cursive;
+    font-size: 1rem; letter-spacing: 2px;
+    color: rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px; padding: 3px 14px;
+    transition: color 0.3s, background 0.3s, border-color 0.3s;
+  }
+  #mob-clock-display.active-clock { color: #7effc0; background: rgba(46,160,67,0.2); border-color: rgba(126,255,192,0.4); }
+  #mob-clock-display.low-clock    { color: #fff; background: rgba(232,57,77,0.35); border-color: rgba(255,107,122,0.5);
+                                    animation: clockPulse 0.8s ease-in-out infinite alternate; }
+  .pause-btn-mob {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 50%; width: 30px; height: 30px;
+    color: rgba(255,255,255,0.6); font-size: 0.85rem; cursor: pointer;
+    transition: background 0.2s; flex-shrink: 0;
+  }
+  .pause-btn-mob:hover { background: rgba(255,255,255,0.18); color: #fff; }
+  .pause-btn-mob.paused { background: rgba(245,200,66,0.2); border-color: rgba(245,200,66,0.4); color: var(--gold); }
+
+  /* ── Mobile: player hand centered ── */
+  #player-hand-area {
+    display: flex; justify-content: center; align-items: center;
+    width: 100%; margin-top: 2px;
+  }
+  #player-hand-row {
+    display: flex; justify-content: center; align-items: center;
+  }
+
+  /* ── Mobile: hide desktop sidebar elements ── */
+  @media (max-width: 599px) {
+    #player-area { gap: 0; }
+    #player-score-panel, #clock-player, #pause-btn-desktop,
+    #status-bar-side, #player-label { display: none !important; }
+    #player-hand-wrap { margin-top: 2px; }
+    #game-row { gap: 2px; }
+  }
+
+  /* ── Side panel styles ── */
+  .side-panel{
+    display:none; flex-direction:column; align-items:center; gap:2px;
+    background:rgba(255,255,255,0.1); border-radius:14px;
+    padding:8px 14px; border:1px solid rgba(255,255,255,0.18); width:100%;
+  }
+  .score-sep{ width:80%; height:1px; background:rgba(255,255,255,0.2); margin:4px 0; }
+  #status-bar-side{
+    display:none; background:rgba(0,0,0,0.3); border-radius:10px;
+    padding:6px 10px; color:#fff; font-size:0.75rem; font-weight:600;
+    text-align:center; width:100%; border:1px solid rgba(255,255,255,0.15); transition:background 0.3s;
+  }
+  #status-bar-side.good{ background:rgba(46,160,67,0.55); }
+  #status-bar-side.warn{ background:rgba(232,57,77,0.45); }
+  #status-bar-side.bump{ background:rgba(200,120,0,0.55); }
+  #log-side{
+    display:none; background:rgba(0,0,0,0.22); border-radius:10px;
+    padding:6px 10px; width:100%; max-height:160px; overflow-y:auto;
+    font-size:0.72rem; color:rgba(255,255,255,0.7);
+    border:1px solid rgba(255,255,255,0.1); margin-top:4px;
+  }
+  #log-side div{ padding:1px 0; }
+  #log-side div:first-child{ color:#fff; }
+  #end-turn-btn-side{
+    display:none; padding:10px 20px;
+    background:linear-gradient(135deg,var(--sunset),#e8394d);
+    color:#fff; border:none; border-radius:30px;
+    font-family:'Nunito',sans-serif; font-size:0.9rem; font-weight:800;
+    cursor:pointer; box-shadow:0 4px 14px rgba(232,57,77,0.38);
+    transition:transform 0.13s,box-shadow 0.13s; width:100%; margin-top:4px;
+  }
+  #end-turn-btn-side:hover:not(:disabled){ transform:translateY(-2px); box-shadow:0 7px 20px rgba(232,57,77,0.48); }
+  #end-turn-btn-side:disabled{ opacity:0.38; cursor:default; transform:none; }
+
+  /* ── Game row layout ── */
+  #game-row{
+    display:flex; flex-direction:column; align-items:center; gap:4px; width:100%;
+  }
+
+  /* ── Desktop layout ── */
+  @media(min-width:600px){
+    #app{ max-width:1200px; }
+    #scoreboard,#status-bar,#end-turn-btn,#log{ display:none!important; }
+    .side-panel{ display:flex; }
+    #status-bar-side{ display:block; }
+    #log-side{ display:block; }
+    #end-turn-btn-side{ display:block; }
+    #game-row{ flex-direction:row; align-items:stretch; justify-content:center; gap:14px; }
+    #computer-area,#player-area{
+      display:flex; flex-direction:column; align-items:center;
+      gap:8px; width:130px; flex-shrink:0;
+    }
+    #computer-hand-wrap,#player-hand-wrap{
+      flex:1; display:flex; flex-direction:column;
+      justify-content:center; align-items:center; gap:5px;
+    }
+    #computer-hand,#player-hand{ flex-direction:column!important; flex-wrap:nowrap!important; gap:5px; }
+    #player-row{ flex-direction:column; align-items:center; gap:5px; }
+    #player-hand-row{ display:flex; justify-content:center; align-items:center; }
+    #player-hand-area{ display:flex; flex-direction:column; align-items:center; width:100%; }
+  }
+</style>
+</head>
+<body>
+
+<div id="lang-switcher">
+  <button class="lang-btn active" onclick="setLang('ru')">RU</button>
+  <button class="lang-btn"        onclick="setLang('en')">EN</button>
+</div>
+
+<!-- Time selection modal -->
+<div id="time-modal">
+  <div id="time-modal-box">
+    <h2 id="tm-title"></h2>
+    <div class="time-presets">
+      <button class="time-preset-btn" onclick="startWithTime(3,2)">3+2<span class="pname"></span></button>
+      <button class="time-preset-btn" onclick="startWithTime(5,3)">5+3<span class="pname"></span></button>
+      <button class="time-preset-btn" onclick="startWithTime(10,5)">10+5<span class="pname"></span></button>
+      <button class="time-preset-btn" onclick="startWithCustomTime()">✎ <span id="tm-custom-label"></span><span class="pname" id="tm-custom-btn-label"></span></button>
+    </div>
+    <div class="time-custom-row">
+      <label style="color:rgba(255,255,255,0.6);font-size:0.8rem">min</label>
+      <input id="custom-min" type="number" min="1" max="60" value="5">
+      <span style="color:rgba(255,255,255,0.4)">+</span>
+      <label style="color:rgba(255,255,255,0.6);font-size:0.8rem">sec inc</label>
+      <input id="custom-inc" type="number" min="0" max="60" value="0">
+    </div>
+    <button class="time-no-limit-btn" onclick="startWithTime(0,0)" id="tm-no-limit"></button>
+  </div>
+</div>
+
+<div id="app">
+  <h1 id="title-text"></h1>
+  <div id="scoreboard">
+    <div class="score-item">
+      <div class="score-label" id="label-you"></div>
+      <div class="score-val player" id="player-score">0</div>
+    </div>
+    <div class="score-item" style="border-left:1px solid rgba(255,255,255,0.18);border-right:1px solid rgba(255,255,255,0.18);padding:0 20px">
+      <div class="score-label" id="label-deck"></div>
+      <div class="score-val deck" id="deck-cnt">72</div>
+    </div>
+    <div class="score-item">
+      <div class="score-label" id="label-cpu"></div>
+      <div class="score-val cpu" id="cpu-score">0</div>
+    </div>
+  </div>
+
+  <div id="status-bar">...</div>
+
+  <div id="game-row">
+
+    <!-- Левая колонка: компьютер -->
+    <div id="computer-area">
+      <div id="cpu-score-panel" class="side-panel">
+        <div class="score-label" id="cpu-label-d"></div>
+        <div class="score-val cpu" id="cpu-score-d">0</div>
+        <div class="score-sep"></div>
+        <div class="score-label" id="label-deck-d"></div>
+        <div class="score-val deck" id="deck-cnt-d">72</div>
+      </div>
+      <div class="area-label" id="cpu-label"></div>
+      <div id="computer-hand-wrap">
+        <div id="computer-hand"></div>
+      </div>
+      <div id="log-side"></div>
+    </div>
+
+    <div id="board-wrap" style="position:relative"><div id="board"></div><div id="board-cover"><span>⏸</span></div></div>
+
+    <!-- Mobile timer bar: between board and player hand, hidden on desktop -->
+    <div id="mobile-timer-bar">
+      <div id="mob-clock-display">--:--</div>
+      <button id="pause-btn-mobile" class="pause-btn-mob" onclick="togglePause()" style="display:none">⏸</button>
+    </div>
+
+    <!-- Правая колонка: игрок -->
+    <div id="player-area">
+      <div id="player-score-panel" class="side-panel">
+        <div class="score-label" id="label-you-d"></div>
+        <div class="score-val player" id="player-score-d">0</div>
+      </div>
+      <div class="clock idle-clock" id="clock-player">--:--</div>
+      <button id="pause-btn-desktop" class="pause-btn" onclick="togglePause()" style="display:none">⏸</button>
+      <div id="status-bar-side">...</div>
+      <div class="area-label" id="player-label"></div>
+      <div id="player-hand-wrap">
+        <div id="player-hand-area">
+          <div id="player-hand-row">
+            <div id="player-row">
+              <div id="bumped-slot" style="display:none">
+                <div class="area-label" id="bumped-label"></div>
+                <div id="bumped-card"></div>
+              </div>
+              <div id="player-hand"></div>
+            </div>
+          </div>
+        </div>
+        <button id="end-turn-btn-side" disabled>...</button>
+      </div>
+    </div>
+
+  </div>
+
+  <button id="end-turn-btn" disabled>...</button>
+  <div id="log"></div>
+  <div id="footer">
+    <span id="footer-text"></span>
+    <a id="footer-link" href="#" target="_blank" rel="noopener"></a>
+  </div>
+</div>
+
+<div id="pause-overlay">
+  <div id="pause-overlay-box">
+    <div class="pause-icon">⏸</div>
+    <h2 id="pause-title">Пауза</h2>
+    <button class="resume-btn" id="resume-btn" onclick="togglePause()">▶ Продолжить</button>
+  </div>
+</div>
+
+<div id="drag-ghost"></div>
+
+<div id="overlay">
+  <div id="overlay-box">
+    <div id="dancers"></div>
+    <div id="overlay-title"></div>
+    <div id="overlay-score"></div>
+    <div id="dance-text"></div>
+    <button id="restart-btn">...</button>
+  </div>
+</div>
+
+
+<script>
+// ===================== PHRASES =====================
+const PHRASES = {
+  ru: {
+    win: [
+      'Диско-богини приветствуют чемпиона! 🪩',
+      'Блестящие наряды, блестящая победа! ✨',
+      'Зеркальный шар вращается в вашу честь! 🪩',
+      'Дискотека объявляет вас лучшим игроком вечера! 💃',
+      'Танцпол дрожит от восторга! 🕺',
+      'Ваш выход — и это был выход! 💫',
+      'Даже диджей снял наушники, чтобы аплодировать! 🎧',
+      'Шансов у компьютера не было. Совсем. 😎',
+      'Компьютер завис и перезагружается в слезах! 💻😢',
+      'Вы — король/королева дискотеки и судоку! 👑',
+      'ABBA посвящает вам следующий трек! 🎵',
+      'Стробоскоп мигает по случаю вашей победы! 🌟',
+      'Платформенные туфли нервно скрипят от зависти! 👠',
+      'Ваши карты двигались в ритме фанка! 🎶',
+      'В ту ночь все смотрели только на вас! 🌙',
+      'Компьютер взял самоотвод. Не по своей воле! 🤖',
+      'Золотой шар снова у вас! 🏆',
+      'Числа сложились — танцы начались! 🎉',
+      'Победный саундтрек уже играет в голове! 🎼',
+      'Это не судоку — это искусство! 🎨',
+    ],
+    lose: [
+      'Панки в экстазе — компьютер сделал это снова! 🤘',
+      'Ваш мозг ушёл на перекур в нужный момент! 🚬',
+      'Компьютер орёт: «Анархия в 9×9!» 🔊',
+      'Хаеры взлетают — цифры пали! 💀',
+      'Машина не знает жалости, только алгоритмы! ⚡',
+      'Панк не умер — он выиграл в судоку! 🎸',
+      'Вас разгромили под Clash. Это больно вдвойне. 📼',
+      'Компьютер ухмыляется. Буквально! 😈',
+      'Следующий раз можно позвать друга. Или двух! 👀',
+      'Процессор не устаёт. В отличие от вас! 😴',
+      'Гребень поднят, ваше самолюбие — нет! ✂️',
+      'Система победила. Пора бунтовать! ✊',
+      'Компьютер надел кожаную куртку и ушёл победителем! 🧥',
+      'Даже патч «I tried» вам не помог! 🪡',
+      'Sex Pistols одобряют этот разгром! 🎤',
+      'Алгоритм смеётся без звука, но очень громко! 🤖',
+      'Компьютер не слушает советов — и правильно! 😤',
+      'Вы поставили не ту карту. Раз девять. 9️⃣',
+      'Матрица взяла реванш! 🟩',
+      'Это был учебный проигрыш. Обязательно! 📚',
+    ],
+    draw: [
+      'Танго вдвоём — никто не сдался первым! 🌹',
+      'Одинаковый счёт, одинаковое смятение! 🤔',
+      'Вы и компьютер идеально совместимы. Странно! 💃🤖',
+      'Ничья — это тоже искусство. Грустное! 🎭',
+      'Двое в танго, двое в тупике! 🕺💃',
+      'Нога в ногу до самого конца! 👣',
+      'Компьютер тоже не понял, что пошло не так! 🤷',
+      'Тайное соглашение? Мы не исключаем! 🤝',
+      'Равновесие нарушено симметрично! ⚖️',
+      'Вы оба слишком хороши. Или слишком плохи! 😅',
+      'Аргентинское танго для двух равных соперников! 🇦🇷',
+      'Одно движение до победы — и никто его не сделал! 😬',
+      'Ничья — дипломатичный исход трагедии! 🕊️',
+      'Даже оракул не знал, чем это кончится! 🔮',
+      'Вы шли ноздря в ноздрю. Это поэзия! 🏇',
+      'Оба гордые, оба голодные, оба без победы! 😤',
+      'Компьютер предлагает реванш. Через 5 секунд! ⏱️',
+      'Самый элегантный из возможных исходов! 🌸',
+      'Ничья — единственный случай, когда все правы! ✌️',
+      'Судоку не любит победителей. Сегодня! 🃏',
+    ],
+  },
+  en: {
+    win: [
+      'Disco queens bow before the champion! 🪩',
+      'Glitter suits for a glittering victory! ✨',
+      'The mirror ball spins in your honour! 🪩',
+      'The DJ stopped to applaud! 🎧',
+      'The dance floor trembles with joy! 🕺',
+      'Your entrance was… everything. 💫',
+      'Computer rebooting in tears! 💻😢',
+      'Undisputed king/queen of Sudoku-disco! 👑',
+      'ABBA dedicates the next track to you! 🎵',
+      'Platform shoes squeak with envy! 👠',
+      'Strobes blink in celebration! 🌟',
+      'Computer had zero chance. Zero. 😎',
+      'Cards moved in perfect funk rhythm! 🎶',
+      'That night everyone watched only you! 🌙',
+      'Numbers aligned, legends were born! 🏆',
+      'Computer filed a complaint. Denied! 🤖',
+      'Golden ball — yours. Again! 🏅',
+      'Not just sudoku — this was art! 🎨',
+      'Victory soundtrack already playing in your head! 🎼',
+      'Boogie nights forever! 🕺🕺',
+    ],
+    lose: [
+      'Punks in ecstasy — computer does it again! 🤘',
+      'Your brain left for a smoke break at exactly the wrong moment! 🚬',
+      'Computer screams: "Anarchy in 9×9!" 🔊',
+      'Mohawks flying — digits falling! 💀',
+      'The machine knows no mercy, only algorithms! ⚡',
+      'Punk is not dead — it just won at sudoku! 🎸',
+      'Destroyed to the sound of The Clash. Twice as painful! 📼',
+      'The CPU smirks without a face. Impressive! 😈',
+      'Maybe invite a friend next time? 👀',
+      'Processor never tires. Unlike you! 😴',
+      'Crest raised, your ego — not so much! ✂️',
+      'The system won. Time to rebel! ✊',
+      'Computer put on a leather jacket and left. Victorious! 🧥',
+      'Even your "I tried" patch didn\'t help! 🪡',
+      'The algorithm laughs silently but very loudly! 🤖',
+      'You placed the wrong card. About nine times. 9️⃣',
+      'The matrix took its revenge! 🟩',
+      'This was a learning loss. Mandatory! 📚',
+      'Sex Pistols approve of this defeat! 🎤',
+      'Computer does not take advice — wisely! 😤',
+    ],
+    draw: [
+      'Tango for two — nobody blinked first! 🌹',
+      'Equal score, equal confusion! 🤔',
+      'You and the computer are oddly compatible! 💃🤖',
+      'A draw is also art. Sad art! 🎭',
+      'Two in the tango, two in a deadlock! 🕺💃',
+      'Step for step until the very end! 👣',
+      'The computer has no idea what happened either! 🤷',
+      'Secret pact? We cannot rule it out! 🤝',
+      'Sudoku equilibrium — symmetrically broken! ⚖️',
+      'Both too good. Or too bad. Hard to say! 😅',
+      'Argentine tango for two equal rivals! 🇦🇷',
+      'One move from victory — neither made it! 😬',
+      'A draw: the diplomatic outcome of a tragedy! 🕊️',
+      'Not even the oracle saw this coming! 🔮',
+      'Neck and neck all the way — pure poetry! 🏇',
+      'Both proud, both hungry, both prizeless! 😤',
+      'Computer offers a rematch. In 5 seconds! ⏱️',
+      'The most elegant outcome possible! 🌸',
+      'A draw: the only moment everyone is right! ✌️',
+      'Locked in eternal sudoku tango! 🎶',
+    ],
+  },
+};
+
+// ===================== I18N =====================
+const LANG = {
+  ru: {
+    title: '🌺 Судоку42',
+    labelYou: '🌿 Вы', labelDeck: '🃏 Колода', labelCpu: '🤖 Компьютер',
+    cpuCards: 'Карты компьютера', yourCards: 'Ваши карты',
+    endTurn: 'Завершить ход ➜', restartBtn: '🌺 Играть снова',
+    statusStart: '🌺 Ваш ход! Перетащите карту из руки на поле',
+    statusYourTurn: '🌺 Ваш ход!',
+    statusThinking: '🤖 Компьютер думает...',
+    statusPlaced: 'Карта выложена. Перемещайте или завершайте ход ➜',
+    statusAlreadyPlaced: '⚠️ Вы уже выложили карту. Завершите ход или переместите карты.',
+    statusInvalid: '⛔ Нельзя — нарушение правил!',
+    statusSwapInvalid: '⛔ Нельзя поменять — нарушение правил!',
+    statusMoveInvalid: '⛔ Нельзя поставить сюда!',
+    statusNeedCard: '⚠️ Сначала выложите карту!',
+    statusPreview: (msgs, pts) => `✨ Закроете: ${msgs.join(', ')} (+${pts})! Завершите ход ➜`,
+    statusBonus: (pts) => `🌺 +${pts}! Дополнительный ход!`,
+    statusCpuBonus: (pts) => `🤖 +${pts} — компьютер ходит снова!`,
+    statusNoCards: '🌿 Нет карт — ход переходит к компьютеру',
+    statusCpuNoCards: '🤖 У компьютера нет карт — ваш ход',
+    statusCpuCant: '🤖 Компьютер не смог выложить карту',
+    logYouPlaced: (v,i) => `🌿 Вы положили ${v} → клетка ${i}`,
+    logYouBumped: (v,b,i) => `🌿 Вы поставили ${v}, вытеснив ${b} с клетки ${i}`,
+    logYouClosed: (m) => `🌿 Вы закрыли ${m} +1`,
+    bumpedLabel: '⚡ Вытеснена',
+    statusBumpPlace: (v) => `⚡ Поставьте карту ${v} на поле или обменяйте с другой`,
+    statusBumpInvalid: '⛔ Сначала разместите вытесненную карту!',
+    statusConflictMode: '⚠️ Нет допустимых ячеек — конфликтный режим. Выберите любую пустую ячейку в другом квадрате.',
+    statusConflictPlaced: '🔧 Карта размещена с конфликтом. Конфликты разрешаются автоматически.',
+    logConflictPlace: (v,i) => `⚠️ Конфликтное размещение: ${v} → клетка ${i}`,
+    logConflictResolve: (v,f,t) => `🔧 Конфликт: ${v} сдвинута ${f}→${t}`,
+    logCpuPlaced: (v,i) => `🤖 Компьютер: ${v} → клетка ${i}`,
+    logCpuMoved: (v,f,t) => `🤖 Переставил ${v}: клетка ${f}→${t}`,
+    logCpuClosed: (m) => `🤖 Компьютер закрыл ${m} +1`,
+    logSwapped: (a,b) => `↕️ Карты ${a} и ${b} поменяны`,
+    logMoved: () => `↗️ Карта перемещена`,
+    gBox: (n) => `квадрат ${n} 🟦`, gRow: (n) => `строку ${n} ➡️`, gCol: (n) => `колонку ${n} ⬇️`,
+    winTitle: '🪩 Вы победили!', loseTitle: '🤘 Компьютер победил!', drawTitle: '🌹 Ничья!',
+    winDancers: '💃🕺💃🕺💃🕺💃', loseDancers: '🧟‍♂️🎸🧟‍♂️🎸🧟‍♂️🎸🧟‍♂️', drawDancers: '💃🌹🕺🌹💃🌹🕺',
+    scoreText: (p,c) => `Вы: ${p}  |  Компьютер: ${c}`,
+    footerText: 'Разработка', footerCompany: 'Logos Games', footerUrl: 'https://logos.games/ru/',
+    tmTitle: '⏱ Выберите контроль времени',
+    tmCustom: 'Свой:', tmCustomBtn: 'OK',
+    tmNoLimit: '∞ Без ограничения времени',
+    tmStart: 'Начать игру',
+    tmPlayerLabel: '🌿 Вы', tmCpuLabel: '🤖 CPU',
+    tmBullet:'пуля', tmBlitz:'блиц', tmRapid:'рапид',
+    timeoutPlayer: '⏰ Ваше время вышло! Компьютер победил.',
+    pauseTitle: 'Пауза', resumeBtn: '▶ Продолжить',
+    timeoutCpu: '⏰ Время компьютера вышло! Вы победили.',
+  },
+  en: {
+    title: '🌺 Sudoku42',
+    labelYou: '🌿 You', labelDeck: '🃏 Deck', labelCpu: '🤖 Computer',
+    cpuCards: "Computer's cards", yourCards: 'Your cards',
+    endTurn: 'End Turn ➜', restartBtn: '🌺 Play Again',
+    statusStart: '🌺 Your turn! Drag a card to the board',
+    statusYourTurn: '🌺 Your turn!',
+    statusThinking: '🤖 Computer is thinking...',
+    statusPlaced: 'Card placed. Rearrange or end turn ➜',
+    statusAlreadyPlaced: '⚠️ Already placed a card. End turn or rearrange.',
+    statusInvalid: '⛔ Cannot place here — rule violation!',
+    statusSwapInvalid: '⛔ Cannot swap — rule violation!',
+    statusMoveInvalid: '⛔ Cannot place here!',
+    statusNeedCard: '⚠️ Place a card first!',
+    statusPreview: (msgs, pts) => `✨ Will close: ${msgs.join(', ')} (+${pts})! End turn ➜`,
+    statusBonus: (pts) => `🌺 +${pts}! Bonus turn!`,
+    statusCpuBonus: (pts) => `🤖 +${pts} — computer plays again!`,
+    statusNoCards: '🌿 No cards — computer\'s turn',
+    statusCpuNoCards: '🤖 Computer has no cards — your turn',
+    statusCpuCant: '🤖 Computer could not place a card',
+    logYouPlaced: (v,i) => `🌿 You placed ${v} → cell ${i}`,
+    logYouBumped: (v,b,i) => `🌿 You placed ${v}, bumping ${b} from cell ${i}`,
+    logYouClosed: (m) => `🌿 You closed ${m} +1`,
+    bumpedLabel: '⚡ Bumped',
+    statusBumpPlace: (v) => `⚡ Place card ${v} on the board or swap it`,
+    statusBumpInvalid: '⛔ Place the bumped card first!',
+    statusConflictMode: '⚠️ No valid cells — conflict mode. Pick any empty cell in a different box.',
+    statusConflictPlaced: '🔧 Card placed with conflict. Resolving automatically.',
+    logConflictPlace: (v,i) => `⚠️ Conflict placement: ${v} → cell ${i}`,
+    logConflictResolve: (v,f,t) => `🔧 Conflict: ${v} shifted ${f}→${t}`,
+    logCpuPlaced: (v,i) => `🤖 Computer: ${v} → cell ${i}`,
+    logCpuMoved: (v,f,t) => `🤖 Moved ${v}: cell ${f}→${t}`,
+    logCpuClosed: (m) => `🤖 Computer closed ${m} +1`,
+    logSwapped: (a,b) => `↕️ Cards ${a} and ${b} swapped`,
+    logMoved: () => `↗️ Card moved`,
+    gBox: (n) => `box ${n} 🟦`, gRow: (n) => `row ${n} ➡️`, gCol: (n) => `col ${n} ⬇️`,
+    winTitle: '🪩 You Won!', loseTitle: '🤘 Computer Won!', drawTitle: '🌹 Draw!',
+    winDancers: '💃🕺💃🕺💃🕺💃', loseDancers: '🧟‍♂️🎸🧟‍♂️🎸🧟‍♂️🎸🧟‍♂️', drawDancers: '💃🌹🕺🌹💃🌹🕺',
+    scoreText: (p,c) => `You: ${p}  |  Computer: ${c}`,
+    footerText: 'Developed by', footerCompany: 'Logos Games', footerUrl: 'https://logos.games/en/',
+    tmTitle: '⏱ Choose Time Control',
+    tmCustom: 'Custom:', tmCustomBtn: 'OK',
+    tmNoLimit: '∞ No time limit',
+    tmStart: 'Start Game',
+    tmPlayerLabel: '🌿 You', tmCpuLabel: '🤖 CPU',
+    tmBullet:'bullet', tmBlitz:'blitz', tmRapid:'rapid',
+    timeoutPlayer: '⏰ Your time is up! Computer wins.',
+    pauseTitle: 'Pause', resumeBtn: '▶ Resume',
+    timeoutCpu: '⏰ Computer ran out of time! You win.',
+  },
+};
+
+let lang = 'ru';
+let T = LANG[lang];
+
+function setLang(l) {
+  lang=l; T=LANG[l];
+  document.documentElement.lang=l;
+  document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.textContent===l.toUpperCase()));
+  applyStatic(); render();
+}
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function applyStatic(){
+  document.getElementById('title-text').textContent=T.title;
+  document.title=T.title;
+  document.getElementById('label-you').textContent=T.labelYou;
+  document.getElementById('label-deck').textContent=T.labelDeck;
+  document.getElementById('label-cpu').textContent=T.labelCpu;
+  document.getElementById('cpu-label').textContent=T.cpuCards;
+  document.getElementById('player-label').textContent=T.yourCards;
+  document.getElementById('end-turn-btn').textContent=T.endTurn;
+  document.getElementById('end-turn-btn-side').textContent=T.endTurn;
+  document.getElementById('restart-btn').textContent=T.restartBtn;
+  document.getElementById('label-you-d').textContent=T.labelYou;
+  document.getElementById('label-deck-d').textContent=T.labelDeck;
+  document.getElementById('cpu-label-d').textContent=T.labelCpu;
+  document.getElementById('footer-text').textContent = T.footerText + ' ';
+  const fl = document.getElementById('footer-link');
+  fl.textContent = T.footerCompany; fl.href = T.footerUrl;
+  // Timer modal
+  document.getElementById('tm-title').textContent = T.tmTitle;
+  document.getElementById('tm-no-limit').textContent = T.tmNoLimit;
+  document.getElementById('tm-custom-label').textContent = T.tmCustom;
+  // preset names
+  const pnames = document.querySelectorAll('.pname');
+  if(pnames[0]) pnames[0].textContent = ' '+T.tmBlitz;
+  if(pnames[1]) pnames[1].textContent = ' '+T.tmBlitz;
+  if(pnames[2]) pnames[2].textContent = ' '+T.tmRapid;
+  // Pause
+  document.getElementById('pause-title').textContent = T.pauseTitle;
+  document.getElementById('resume-btn').textContent = T.resumeBtn;
+}
+
+// ===================== TIMER (player only) =====================
+const timer = {
+  ms: 0,
+  increment: 0,
+  active: false,
+  paused: false,
+  interval: null,
+  lastTick: 0,
+};
+
+function togglePause(){
+  if(!timer.active || state.gameOver) return;
+  timer.paused = !timer.paused;
+  const allPauseBtns = [
+    document.getElementById('pause-btn-desktop'),
+    document.getElementById('pause-btn-mobile'),
+  ].filter(Boolean);
+  if(timer.paused){
+    if(timer.interval){ clearInterval(timer.interval); timer.interval=null; }
+    document.getElementById('pause-overlay').classList.add('show');
+    document.getElementById('board-cover').classList.add('show');
+    allPauseBtns.forEach(b=>{b.classList.add('paused');b.textContent='▶';});
+  } else {
+    document.getElementById('pause-overlay').classList.remove('show');
+    document.getElementById('board-cover').classList.remove('show');
+    allPauseBtns.forEach(b=>{b.classList.remove('paused');b.textContent='⏸';});
+    if(state.turn==='player' && !state.resolving){
+      timer.lastTick = Date.now();
+      timer.interval = setInterval(tickTimer, 100);
+    }
+    updateClockUI();
+  }
+}
+
+function showTimeModal(){
+  applyStatic();
+  document.getElementById('time-modal').classList.add('show');
+}
+
+function startWithTime(minutes, inc){
+  document.getElementById('time-modal').classList.remove('show');
+  timer.active = minutes > 0;
+  timer.ms = minutes * 60 * 1000;
+  timer.increment = inc * 1000;
+  startGame();
+}
+
+function startWithCustomTime(){
+  const min = parseInt(document.getElementById('custom-min').value)||5;
+  const inc = parseInt(document.getElementById('custom-inc').value)||0;
+  startWithTime(min, inc);
+}
+
+function startPlayerTimer(){
+  if(!timer.active || timer.paused) return;
+  stopTimer();
+  timer.lastTick = Date.now();
+  timer.interval = setInterval(tickTimer, 100);
+  updateClockUI();
+}
+
+function stopTimer(){
+  if(timer.interval){ clearInterval(timer.interval); timer.interval=null; }
+  updateClockUI();
+}
+
+function fmtTime(ms){
+  if(ms<=0) return '0:00';
+  const s=Math.ceil(ms/1000);
+  return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
+}
+
+function addIncrement(){
+  if(!timer.active) return;
+  timer.ms += timer.increment;
+}
+
+function tickTimer(){
+  const now=Date.now();
+  timer.ms -= now - timer.lastTick;
+  timer.lastTick = now;
+  if(timer.ms<=0){ timer.ms=0; updateClockUI(); onPlayerTimeout(); return; }
+  updateClockUI();
+}
+
+function onPlayerTimeout(){
+  stopTimer();
+  state.gameOver=true;
+  const msg=T.timeoutPlayer;
+  document.getElementById('overlay-title').textContent=T.loseTitle;
+  document.getElementById('dancers').textContent=T.loseDancers;
+  document.getElementById('dance-text').textContent=msg;
+  document.getElementById('overlay-score').textContent=T.scoreText(state.playerScore,state.cpuScore);
+  document.getElementById('restart-btn').textContent=T.restartBtn;
+  document.getElementById('overlay').classList.add('show');
+  render();
+}
+
+function updateClockUI(){
+  const el   = document.getElementById('clock-player');
+  const pbD  = document.getElementById('pause-btn-desktop');
+  const mobBar  = document.getElementById('mobile-timer-bar');
+  const mobClock = document.getElementById('mob-clock-display');
+  const pbM  = document.getElementById('pause-btn-mobile');
+
+  if(!timer.active){
+    if(el)  el.className='clock';
+    if(pbD) pbD.style.display='none';
+    if(pbM) pbM.style.display='none';
+    if(mobBar)  mobBar.classList.remove('show');
+    if(mobClock) mobClock.className='';
+    return;
+  }
+
+  if(pbD) pbD.style.display='';
+  if(pbM) pbM.style.display='';
+  if(mobBar) mobBar.classList.add('show');
+
+  const ms       = timer.ms;
+  const low      = ms < 10000;
+  const running  = !!timer.interval;
+  const stateCls = running ? (low ? 'low-clock' : 'active-clock') : 'idle-clock';
+  const txt      = fmtTime(ms);
+
+  if(el){ el.textContent = txt; el.className = 'clock show ' + stateCls; }
+  if(mobClock){ mobClock.textContent = txt; mobClock.className = running ? (low ? 'low-clock' : 'active-clock') : ''; }
+}
+
+// ===================== STATE =====================
+const state = {
+  deck:[], board:Array(81).fill(null),
+  playerHand:[], cpuHand:[],
+  playerScore:0, cpuScore:0,
+  turn:'player',
+  placedThisTurn:false, lastPlacedIdx:-1, cpuLastPlaced:-1,
+  bumped: null,
+  conflictMode: false,
+  wasConflict: false,
+  resolving: false,   // идёт анимация разрешения конфликта
+  gameOver:false,
+};
+
+// ===================== INIT =====================
+function initGame(){
+  stopTimer();
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('clock-bar')?.classList.remove('show');
+  document.getElementById('clock-player').className='clock';
+  applyStatic();
+  showTimeModal();
+}
+
+function startGame(){
+  timer.paused = false;
+  document.getElementById('pause-overlay').classList.remove('show');
+  document.getElementById('board-cover').classList.remove('show');
+  const full=[];
+  for(let v=1;v<=9;v++) for(let k=0;k<9;k++) full.push(v);
+  state.deck=shuffle(full);
+  state.board=Array(81).fill(null);
+  state.playerHand=[state.deck.pop(),state.deck.pop(),state.deck.pop()];
+  state.cpuHand=[state.deck.pop(),state.deck.pop(),state.deck.pop()];
+  state.playerScore=0; state.cpuScore=0;
+  state.turn='player';
+  state.placedThisTurn=false; state.lastPlacedIdx=-1; state.cpuLastPlaced=-1;
+  state.bumped=null; state.conflictMode=false; state.wasConflict=false; state.resolving=false;
+  state.gameOver=false;
+  render(); setStatus(T.statusStart);
+  if(timer.active) startPlayerTimer();
+}
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+
+// ===================== GEOMETRY =====================
+function rowOf(idx){ const r=Math.floor(idx/9),out=[]; for(let c=0;c<9;c++) out.push(r*9+c); return out; }
+function colOf(idx){ const c=idx%9,out=[]; for(let r=0;r<9;r++) out.push(r*9+c); return out; }
+function boxOf(idx){
+  const r=Math.floor(idx/9),c=idx%9;
+  const br=Math.floor(r/3)*3,bc=Math.floor(c/3)*3,out=[];
+  for(let dr=0;dr<3;dr++) for(let dc=0;dc<3;dc++) out.push((br+dr)*9+(bc+dc));
+  return out;
+}
+
+// ===================== VALIDATION =====================
+function canPlace(idx,v){
+  if(state.board[idx]) return false;
+  for(const i of rowOf(idx)) if(state.board[i]?.value===v) return false;
+  for(const i of colOf(idx)) if(state.board[i]?.value===v) return false;
+  for(const i of boxOf(idx)) if(state.board[i]?.value===v) return false;
+  return true;
+}
+
+// ===================== SCORING =====================
+function checkGroup(cells){
+  if(!cells.every(i=>state.board[i])) return null;
+  // Группа уже засчитана — все карты заблокированы
+  if(cells.every(i=>state.board[i].locked)) return null;
+  const vals=cells.map(i=>state.board[i].value).sort((a,b)=>a-b);
+  for(let v=1;v<=9;v++) if(vals[v-1]!==v) return null;
+  return cells;
+}
+function scoreForPlacement(idx){
+  let points=0; const msgs=[]; const tolock=new Set();
+  const checkedBoxes=new Set(), checkedRows=new Set(), checkedCols=new Set();
+  for(let i=0;i<81;i++){
+    if(!state.board[i]) continue;
+    const row=Math.floor(i/9), col=i%9;
+    const br=Math.floor(row/3)*3+Math.floor(col/3);
+    if(!checkedBoxes.has(br)){ checkedBoxes.add(br);
+      const bR=checkGroup(boxOf(i)); if(bR){points++;msgs.push(T.gBox(br+1));bR.forEach(j=>tolock.add(j));} }
+    if(!checkedRows.has(row)){ checkedRows.add(row);
+      const rR=checkGroup(rowOf(i)); if(rR){points++;msgs.push(T.gRow(row+1));rR.forEach(j=>tolock.add(j));} }
+    if(!checkedCols.has(col)){ checkedCols.add(col);
+      const cR=checkGroup(colOf(i)); if(cR){points++;msgs.push(T.gCol(col+1));cR.forEach(j=>tolock.add(j));} }
+  }
+  return{points,msgs,tolock};
+}
+function applyScoreAndLock(idx,who){
+  // Сканируем все ячейки доски — проверяем каждую группу ровно один раз
+  let points=0; const msgs=[]; const tolock=new Set();
+  const checkedBoxes=new Set(), checkedRows=new Set(), checkedCols=new Set();
+
+  for(let i=0;i<81;i++){
+    if(!state.board[i]) continue;
+
+    const row=Math.floor(i/9), col=i%9;
+    const br=Math.floor(row/3)*3+Math.floor(col/3); // правильный ID квадрата 0-8
+    if(!checkedBoxes.has(br)){
+      checkedBoxes.add(br);
+      const bR=checkGroup(boxOf(i));
+      if(bR){points++;msgs.push(T.gBox(br+1));bR.forEach(j=>tolock.add(j));}
+    }
+    if(!checkedRows.has(row)){
+      checkedRows.add(row);
+      const rR=checkGroup(rowOf(i));
+      if(rR){points++;msgs.push(T.gRow(row+1));rR.forEach(j=>tolock.add(j));}
+    }
+    if(!checkedCols.has(col)){
+      checkedCols.add(col);
+      const cR=checkGroup(colOf(i));
+      if(cR){points++;msgs.push(T.gCol(col+1));cR.forEach(j=>tolock.add(j));}
+    }
+  }
+
+  if(points>0){
+    tolock.forEach(i=>{if(state.board[i]) state.board[i].locked=true;});
+    if(who==='player') state.playerScore+=points; else state.cpuScore+=points;
+    const fn=who==='player'?T.logYouClosed:T.logCpuClosed;
+    msgs.forEach(m=>addLog(fn(m)));
+    showFlash(points);
+  }
+  return points;
+}
+function showFlash(pts){
+  const el=document.createElement('div');
+  el.className='point-flash'; el.textContent=`+${pts} ⭐`;
+  el.style.left=(Math.random()*40+30)+'%'; el.style.top='40%';
+  document.body.appendChild(el); setTimeout(()=>el.remove(),1300);
+}
+
+// ===================== DRAW CARD =====================
+function drawCard(who){
+  if(!state.deck.length) return false;
+  const c=state.deck.pop();
+  if(who==='player') state.playerHand.push(c); else state.cpuHand.push(c);
+  return true;
+}
+
+// ===================== PLAYER PLACE =====================
+function playerPlace(handIdx, boardIdx){
+  if(state.bumped){ setStatus(T.statusBumpInvalid,'warn'); return false; }
+  if(state.placedThisTurn){ setStatus(T.statusAlreadyPlaced,'warn'); return false; }
+  const v = state.playerHand[handIdx];
+
+  // Если активен конфликтный режим — направляем в конфликтный обработчик
+  if(state.conflictMode) return playerPlaceConflict(handIdx, boardIdx);
+
+  const occupant = state.board[boardIdx];
+  if(occupant && occupant.locked){ setStatus(T.statusInvalid,'warn'); return false; }
+
+  // Проверяем валидность (временно убираем жильца)
+  if(occupant) state.board[boardIdx]=null;
+  const ok = canPlace(boardIdx, v);
+  if(occupant) state.board[boardIdx]=occupant;
+
+  if(!ok){
+    // Нет ни одной валидной клетки для этой карты?
+    if(!hasAnyValidCell(v)){
+      state.conflictMode=true;
+      setStatus(T.statusConflictMode,'warn');
+      render();
+      return playerPlaceConflict(handIdx, boardIdx);
+    }
+    setStatus(T.statusInvalid,'warn'); return false;
+  }
+
+  // Обычное размещение
+  state.playerHand.splice(handIdx,1);
+  if(occupant){
+    state.bumped = { value: occupant.value };
+    addLog(T.logYouBumped(v, occupant.value, boardIdx+1));
+  } else {
+    addLog(T.logYouPlaced(v, boardIdx+1));
+  }
+  state.board[boardIdx] = {value:v, owner:'player', locked:false};
+  state.placedThisTurn = true;
+  state.lastPlacedIdx = boardIdx;
+
+  if(state.bumped){
+    setStatus(T.statusBumpPlace(state.bumped.value),'bump');
+  } else {
+    const{points,msgs}=scoreForPlacement(boardIdx);
+    setStatus(points>0?T.statusPreview(msgs,points):T.statusPlaced, points>0?'good':'');
+  }
+  render(); return true;
+}
+
+// Размещение вытесненной карты на доску (на пустую клетку или с обменом с другой)
+function bumpedPlace(boardIdx){
+  if(!state.bumped) return false;
+  const v = state.bumped.value;
+  const occupant = state.board[boardIdx];
+
+  if(occupant && occupant.locked){ setStatus(T.statusInvalid,'warn'); return false; }
+
+  // Проверяем, что v встанет корректно
+  if(occupant) state.board[boardIdx]=null;
+  const ok = canPlace(boardIdx, v);
+  if(occupant) state.board[boardIdx]=occupant;
+  if(!ok){ setStatus(T.statusInvalid,'warn'); return false; }
+
+  if(occupant){
+    // Цепочка: вытесненная → поле, та что была там → новый bumped
+    state.board[boardIdx] = {value:v, owner:'player', locked:false};
+    state.bumped = { value: occupant.value };
+    addLog(T.logYouBumped(v, occupant.value, boardIdx+1));
+    setStatus(T.statusBumpPlace(state.bumped.value),'bump');
+  } else {
+    state.board[boardIdx] = {value:v, owner:'player', locked:false};
+    state.bumped = null;
+    addLog(T.logYouPlaced(v, boardIdx+1));
+    const{points,msgs}=scoreForPlacement(boardIdx);
+    setStatus(points>0?T.statusPreview(msgs,points):T.statusPlaced, points>0?'good':'');
+  }
+  render(); return true;
+}
+
+// ===================== CONFLICT MODE =====================
+
+// Проверяет, есть ли хоть одна валидная клетка для значения v
+// (пустая и не нарушающая правила судоку)
+function hasAnyValidCell(v){
+  for(let i=0;i<81;i++) if(canPlace(i,v)) return true;
+  return false;
+}
+
+// Есть ли хоть одна клетка, куда ВООБЩЕ можно поставить карту
+// (пустая, даже если нарушает строку/колонку — только квадрат не нарушает)
+function hasAnyConflictCell(v){
+  for(let i=0;i<81;i++){
+    if(state.board[i]) continue;
+    const box=boxOf(i);
+    if(!box.some(b=>state.board[b]&&state.board[b].value===v)) return true;
+  }
+  return false;
+}
+
+// Клетки допустимые для конфликтного размещения:
+// пустые + в другом квадрате нет этого значения
+function conflictAllowedCells(v){
+  const cells=[];
+  for(let i=0;i<81;i++){
+    if(state.board[i]) continue;
+    const box=boxOf(i);
+    if(box.some(b=>state.board[b]&&state.board[b].value===v)) continue;
+    cells.push(i);
+  }
+  return cells;
+}
+
+// Разрешение всех конфликтов — сканирует всё поле до полной чистоты
+async function resolveConflicts(placedIdx){
+  let changed=true;
+  let iterations=0;
+
+  while(changed && iterations<80){
+    changed=false; iterations++;
+
+    // Ищем любой конфликт на всём поле: два одинаковых значения в одной строке или колонке
+    let found=false;
+
+    // Проверяем строки
+    for(let r=0; r<9 && !found; r++){
+      const row=rowOf(r*9);
+      for(let a=0; a<9 && !found; a++){
+        if(!state.board[row[a]]) continue;
+        for(let b=a+1; b<9 && !found; b++){
+          if(!state.board[row[b]]) continue;
+          if(state.board[row[a]].value===state.board[row[b]].value){
+            // Нарушитель — тот что НЕ является изначально размещённой картой
+            const victim = row[a]===placedIdx ? row[b] : row[a];
+            if(tryShift(victim,'vertical',1)||tryShift(victim,'vertical',-1)||
+               tryShift(victim,'vertical',2)||tryShift(victim,'vertical',-2)){
+              render(); await delay(380); changed=true; found=true;
+            }
+          }
+        }
+      }
+    }
+
+    // Проверяем колонки
+    for(let c=0; c<9 && !found; c++){
+      const col=colOf(c);
+      for(let a=0; a<9 && !found; a++){
+        if(!state.board[col[a]]) continue;
+        for(let b=a+1; b<9 && !found; b++){
+          if(!state.board[col[b]]) continue;
+          if(state.board[col[a]].value===state.board[col[b]].value){
+            const victim = col[a]===placedIdx ? col[b] : col[a];
+            if(tryShift(victim,'horizontal',1)||tryShift(victim,'horizontal',-1)||
+               tryShift(victim,'horizontal',2)||tryShift(victim,'horizontal',-2)){
+              render(); await delay(380); changed=true; found=true;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// Сдвигает карту на fromIdx на delta клеток в направлении dir, оставаясь в квадрате.
+// При конфликтном разрешении валидация судоку НЕ применяется — двигаем принудительно.
+// Если целевая клетка занята — меняем местами.
+function tryShift(fromIdx, dir, delta){
+  const r=Math.floor(fromIdx/9), c=fromIdx%9;
+  let nr=r, nc=c;
+  if(dir==='horizontal') nc=c+delta;
+  else                   nr=r+delta;
+
+  if(nr<0||nr>8||nc<0||nc>8) return false;
+  const toIdx=nr*9+nc;
+
+  // Должно остаться в том же квадрате
+  if(boxOf(fromIdx).indexOf(toIdx)===-1) return false;
+
+  const card=state.board[fromIdx];
+  const occupant=state.board[toIdx];
+
+  // Выполняем сдвиг — принудительно, без проверки правил судоку
+  state.board[fromIdx]=occupant||null;
+  state.board[toIdx]=card;
+
+  if(occupant){
+    addLog(T.logConflictResolve(`${card.value}↔${occupant.value}`, fromIdx+1, toIdx+1));
+  } else {
+    addLog(T.logConflictResolve(card.value, fromIdx+1, toIdx+1));
+  }
+  return true;
+}
+
+// Конфликтное размещение из руки — синхронно кладёт карту, затем запускает async анимацию
+function playerPlaceConflict(handIdx, boardIdx){
+  if(state.placedThisTurn){ setStatus(T.statusAlreadyPlaced,'warn'); return false; }
+  const v=state.playerHand[handIdx];
+  if(state.board[boardIdx]){ setStatus(T.statusInvalid,'warn'); return false; }
+  const box=boxOf(boardIdx);
+  if(box.some(b=>state.board[b]&&state.board[b].value===v)){
+    setStatus(T.statusInvalid,'warn'); return false;
+  }
+  state.board[boardIdx]={value:v,owner:'player',locked:false};
+  state.playerHand.splice(handIdx,1);
+  state.placedThisTurn=true;
+  state.lastPlacedIdx=boardIdx;
+  state.resolving=true;
+  state.conflictMode=false;
+  state.wasConflict=true;
+  addLog(T.logConflictPlace(v,boardIdx+1));
+  setStatus(T.statusConflictPlaced,'warn');
+  render();
+  // Запускаем асинхронное разрешение отдельно
+  resolveConflicts(boardIdx).then(()=>{
+    state.resolving=false;
+    render();
+  });
+  return true;
+}
+function computerTurn(){
+  if(!state.cpuHand.length){
+    addLog(T.statusCpuNoCards);
+    state.turn='player'; state.placedThisTurn=false;
+    render(); checkGameOver();
+    if(!state.gameOver) setStatus(T.statusYourTurn);
+    return;
+  }
+  setStatus(T.statusThinking);
+  setTimeout(()=>{
+    const ok=doCpuPlace();
+    if(!ok){ addLog(T.statusCpuCant); finishCpuTurn(0); return; }
+    if(ok==='conflict') return; // finishCpuTurn вызовется из resolveConflicts.then()
+    render();
+    setTimeout(()=>{ const pts=applyScoreAndLock(state.cpuLastPlaced,'cpu'); finishCpuTurn(pts); },600);
+  },900);
+}
+
+function doCpuPlace(){
+  const rr=findRearrangement();
+  if(rr){
+    const{mf,mt,hi,bi}=rr;
+    const mc=state.board[mf];
+    state.board[mt]=mc; state.board[mf]=null;
+    addLog(T.logCpuMoved(mc.value,mf+1,mt+1));
+    const v=state.cpuHand[hi];
+    state.board[bi]={value:v,owner:'cpu',locked:false};
+    state.cpuHand.splice(hi,1); state.cpuLastPlaced=bi;
+    addLog(T.logCpuPlaced(v,bi+1));
+    return true;
+  }
+  const mv=findClosing('box')||findClosing('row')||findClosing('col')||findMatching()||findRandom();
+  if(mv){
+    const{hi,bi}=mv;
+    const v=state.cpuHand[hi];
+    state.board[bi]={value:v,owner:'cpu',locked:false};
+    state.cpuHand.splice(hi,1); state.cpuLastPlaced=bi;
+    addLog(T.logCpuPlaced(v,bi+1));
+    return true;
+  }
+  // Нет валидных клеток — конфликтное размещение
+  return doCpuPlaceConflict();
+}
+
+function doCpuPlaceConflict(){
+  for(let hi=0;hi<state.cpuHand.length;hi++){
+    const v=state.cpuHand[hi];
+    for(let bi=0;bi<81;bi++){
+      if(state.board[bi]) continue;
+      const box=boxOf(bi);
+      if(box.some(b=>state.board[b]&&state.board[b].value===v)) continue;
+      state.board[bi]={value:v,owner:'cpu',locked:false};
+      state.cpuHand.splice(hi,1); state.cpuLastPlaced=bi;
+      state.resolving=true;
+      render();
+      addLog(T.logConflictPlace(v,bi+1));
+      // Запускаем анимацию, потом завершаем ход
+      resolveConflicts(bi).then(()=>{
+        state.resolving=false;
+        render();
+        const pts=applyScoreAndLock(state.cpuLastPlaced,'cpu');
+        finishCpuTurn(pts);
+      });
+      return 'conflict'; // специальный флаг — finishCpuTurn вызовется из .then()
+    }
+  }
+  return false;
+}
+
+function vibrateYourTurn(){
+  if(navigator.vibrate) navigator.vibrate([30, 60, 30]);
+}
+
+function finishCpuTurn(pts){
+  drawCard('cpu');
+  if(pts===0){
+    state.turn='player'; state.placedThisTurn=false;
+    render(); checkGameOver();
+    if(!state.gameOver){
+      vibrateYourTurn();
+      setStatus(T.statusYourTurn);
+      if(timer.active) startPlayerTimer();
+    }
+  } else {
+    if(!state.cpuHand.length&&!state.deck.length){
+      state.turn='player'; state.placedThisTurn=false;
+      render(); checkGameOver();
+      if(!state.gameOver){
+        vibrateYourTurn();
+        setStatus(T.statusYourTurn);
+        if(timer.active) startPlayerTimer();
+      }
+      return;
+    }
+    setStatus(T.statusCpuBonus(pts),'warn'); render();
+    setTimeout(()=>computerTurn(),1200);
+  }
+}
+
+// ===================== CPU AI =====================
+function canBoardMove(f,t){
+  const c=state.board[f]; if(!c||c.locked||state.board[t]) return false;
+  state.board[f]=null; const ok=canPlace(t,c.value); state.board[f]=c; return ok;
+}
+function findRearrangement(){
+  for(let hi=0;hi<state.cpuHand.length;hi++){
+    const hv=state.cpuHand[hi];
+    for(let f=0;f<81;f++){
+      const c=state.board[f]; if(!c||c.locked) continue;
+      for(let t=0;t<81;t++){
+        if(t===f||!canBoardMove(f,t)) continue;
+        state.board[t]=state.board[f]; state.board[f]=null;
+        for(let bi=0;bi<81;bi++){
+          if(!canPlace(bi,hv)) continue;
+          for(const gfn of [boxOf,rowOf,colOf]){
+            const g=gfn(bi);
+            if(g.filter(i=>state.board[i]).length===8){
+              const vals=g.filter(i=>state.board[i]).map(i=>state.board[i].value); vals.push(hv);
+              if([1,2,3,4,5,6,7,8,9].every(x=>vals.includes(x))){
+                state.board[f]=state.board[t]; state.board[t]=null;
+                return{mf:f,mt:t,hi,bi};
+              }
+            }
+          }
+        }
+        state.board[f]=state.board[t]; state.board[t]=null;
+      }
+    }
+  }
+  return null;
+}
+function findClosing(type){
+  const gfn=type==='box'?boxOf:type==='row'?rowOf:colOf;
+  for(let hi=0;hi<state.cpuHand.length;hi++){
+    const v=state.cpuHand[hi];
+    for(let bi=0;bi<81;bi++){
+      if(!canPlace(bi,v)) continue;
+      const g=gfn(bi);
+      if(g.filter(i=>state.board[i]).length===8){
+        const vals=g.filter(i=>state.board[i]).map(i=>state.board[i].value); vals.push(v);
+        if([1,2,3,4,5,6,7,8,9].every(x=>vals.includes(x))) return{hi,bi};
+      }
+    }
+  }
+  return null;
+}
+function findMatching(){
+  const onBoard=state.board.filter(Boolean).map(c=>c.value);
+  for(let hi=0;hi<state.cpuHand.length;hi++){
+    const v=state.cpuHand[hi];
+    if(onBoard.includes(v)) for(let bi=0;bi<81;bi++) if(canPlace(bi,v)) return{hi,bi};
+  }
+  return null;
+}
+function findRandom(){
+  const cands=[];
+  for(let hi=0;hi<state.cpuHand.length;hi++)
+    for(let bi=0;bi<81;bi++) if(canPlace(bi,state.cpuHand[hi])) cands.push({hi,bi});
+  if(!cands.length) return null;
+  return cands[Math.floor(Math.random()*cands.length)];
+}
+
+// ===================== END TURN =====================
+function endPlayerTurn(){
+  if(!state.placedThisTurn){ setStatus(T.statusNeedCard,'warn'); return; }
+  // Инкремент начисляется при завершении хода
+  addIncrement();
+  stopTimer(); // пока ходит компьютер — таймер стоит
+  if(state.wasConflict){
+    state.wasConflict=false;
+    drawCard('player');
+    state.placedThisTurn=false; state.lastPlacedIdx=-1;
+    state.turn='cpu'; render(); checkGameOver();
+    if(!state.gameOver) computerTurn();
+    return;
+  }
+  const pts=applyScoreAndLock(state.lastPlacedIdx,'player');
+  drawCard('player');
+  state.placedThisTurn=false; state.lastPlacedIdx=-1;
+  if(pts>0){
+    render();
+    if(!state.playerHand.length&&!state.deck.length){ checkGameOver(); return; }
+    // Бонусный ход — таймер снова у игрока
+    if(timer.active) startPlayerTimer();
+    setStatus(T.statusBonus(pts),'good'); return;
+  }
+  state.turn='cpu'; render(); checkGameOver();
+  if(!state.gameOver) computerTurn();
+}
+
+// ===================== GAME OVER =====================
+function checkGameOver(){
+  const full=state.board.every(Boolean);
+  // Игра заканчивается только когда доска полна ИЛИ у обоих нет карт И колода пуста
+  const noCards=!state.deck.length&&!state.playerHand.length&&!state.cpuHand.length;
+  if(full||noCards){ state.gameOver=true; showEndGame(); return; }
+
+  // Если сейчас ход игрока но карт нет — передаём компьютеру
+  if(state.turn==='player'&&!state.playerHand.length&&!state.deck.length){
+    addLog(T.statusNoCards);
+    state.turn='cpu'; state.placedThisTurn=false; render(); computerTurn();
+    return;
+  }
+  // Если сейчас ход компьютера но карт нет — передаём игроку
+  if(state.turn==='cpu'&&!state.cpuHand.length&&!state.deck.length){
+    addLog(T.statusCpuNoCards);
+    state.turn='player'; state.placedThisTurn=false; render();
+    setStatus(T.statusYourTurn);
+    if(timer.active) startPlayerTimer();
+  }
+}
+function showEndGame(){
+  stopTimer();
+  const ps=state.playerScore,cs=state.cpuScore;
+  let title,dancers,text;
+  if(ps>cs){ title=T.winTitle; dancers=T.winDancers; text=pick(PHRASES[lang].win); }
+  else if(cs>ps){ title=T.loseTitle; dancers=T.loseDancers; text=pick(PHRASES[lang].lose); }
+  else { title=T.drawTitle; dancers=T.drawDancers; text=pick(PHRASES[lang].draw); }
+  document.getElementById('overlay-title').textContent=title;
+  document.getElementById('dancers').textContent=dancers;
+  document.getElementById('overlay-score').textContent=T.scoreText(ps,cs);
+  document.getElementById('dance-text').textContent=text;
+  document.getElementById('restart-btn').textContent=T.restartBtn;
+  document.getElementById('overlay').classList.add('show');
+}
+
+// ===================== DRAG & DROP =====================
+const ghost=document.getElementById('drag-ghost');
+let dragState={active:false,source:null,handIdx:-1,boardIdx:-1,value:0};
+
+function startDragHand(e,hi){
+  if(state.turn!=='player'||state.gameOver||state.resolving) return;
+  if(state.bumped){ setStatus(T.statusBumpInvalid,'warn'); return; }
+  const v=state.playerHand[hi];
+  // Проверяем заранее: нужен ли конфликтный режим
+  if(!state.conflictMode && !hasAnyValidCell(v)){
+    state.conflictMode=true;
+    setStatus(T.statusConflictMode,'warn');
+  }
+  dragState={active:true,source:'hand',handIdx:hi,boardIdx:-1,value:v};
+  ghost.textContent=v; ghost.className='from-hand visible';
+  movGhost(e);
+  document.querySelectorAll('.hand-card')[hi]?.classList.add('dragging');
+  hlValid(v);
+}
+function startDragBumped(e){
+  if(state.turn!=='player'||state.gameOver||!state.bumped) return;
+  dragState={active:true,source:'bumped',handIdx:-1,boardIdx:-1,value:state.bumped.value};
+  ghost.textContent=state.bumped.value; ghost.className='from-bumped visible';
+  movGhost(e);
+  document.getElementById('bumped-card').querySelector('.bumped-card')?.classList.add('dragging');
+  hlValid(dragState.value);
+}
+function startDragBoard(e,bi){
+  if(state.gameOver) return;
+  if(state.bumped){ setStatus(T.statusBumpInvalid,'warn'); return; }
+  const c=state.board[bi]; if(!c||c.locked) return;
+  dragState={active:true,source:'board',handIdx:-1,boardIdx:bi,value:c.value};
+  ghost.textContent=c.value; ghost.className='from-board visible';
+  movGhost(e);
+  document.querySelectorAll('.board-card')[bi]?.classList.add('dragging');
+  hlValid(dragState.value,bi);
+}
+function movGhost(e){
+  const t=e.touches?e.touches[0]:e;
+  ghost.style.left=t.clientX+'px'; ghost.style.top=t.clientY+'px';
+}
+function hlValid(v,ex=-1){
+  document.querySelectorAll('.cell').forEach((el,i)=>{
+    if(i===ex) return;
+    const tmp=state.board[ex]; if(ex>=0) state.board[ex]=null;
+    let ok=false;
+    if(state.conflictMode && ex===-1){
+      // Конфликтный режим: пустая ячейка, квадрат без этого значения
+      if(!state.board[i]){
+        const box=boxOf(i);
+        ok=!box.some(b=>state.board[b]&&state.board[b].value===v);
+      }
+    } else {
+      const occupant=state.board[i];
+      if(!occupant){
+        ok=canPlace(i,v);
+      } else if(!occupant.locked){
+        state.board[i]=null; ok=canPlace(i,v); state.board[i]=occupant;
+      }
+    }
+    if(ok) el.classList.add('highlight');
+    if(ex>=0) state.board[ex]=tmp;
+  });
+}
+function clearHl(){
+  document.querySelectorAll('.cell').forEach(el=>el.classList.remove('highlight','drop-ok','drop-bad'));
+}
+function endDrag(e){
+  if(!dragState.active) return;
+  ghost.classList.remove('visible'); clearHl();
+  const t=e.changedTouches?e.changedTouches[0]:e;
+  const el=document.elementFromPoint(t.clientX,t.clientY);
+  const cell=el?.closest('.cell');
+  if(dragState.source==='hand') document.querySelectorAll('.hand-card').forEach(el=>el.classList.remove('dragging'));
+  else if(dragState.source==='board') document.querySelectorAll('.board-card').forEach(el=>el.classList.remove('dragging'));
+  else if(dragState.source==='bumped') document.getElementById('bumped-card').querySelector('.bumped-card')?.classList.remove('dragging');
+  if(cell){
+    const ti=parseInt(cell.dataset.idx);
+    if(dragState.source==='hand'){ if(state.turn==='player') playerPlace(dragState.handIdx,ti); }
+    else if(dragState.source==='bumped'){ bumpedPlace(ti); }
+    else if(dragState.source==='board'){ if(dragState.boardIdx!==ti) moveBoardCard(dragState.boardIdx,ti); }
+  }
+  dragState.active=false;
+  // Если конфликтный режим был активирован при перетаскивании, но карта не была размещена — сбрасываем
+  if(state.conflictMode && !state.placedThisTurn){ state.conflictMode=false; state.wasConflict=false; }
+  render();
+}
+function moveBoardCard(f,t){
+  const c=state.board[f]; if(!c||c.locked) return;
+  if(state.bumped){ setStatus(T.statusBumpInvalid,'warn'); return; }
+  const occupant=state.board[t];
+  if(occupant && occupant.locked){ setStatus(T.statusMoveInvalid,'warn'); return; }
+
+  // Проверяем только: встанет ли c на место t
+  state.board[f]=null;
+  if(occupant) state.board[t]=null;
+  const ok=canPlace(t,c.value);
+  state.board[f]=c;
+  if(occupant) state.board[t]=occupant;
+
+  if(!ok){ setStatus(T.statusMoveInvalid,'warn'); return; }
+
+  // Выполняем ход
+  state.board[f]=null;
+  if(occupant){
+    state.board[t]=c;
+    state.bumped={ value: occupant.value };
+    addLog(T.logYouBumped(c.value, occupant.value, t+1));
+    setStatus(T.statusBumpPlace(state.bumped.value),'bump');
+  } else {
+    state.board[t]=c;
+    addLog(T.logMoved());
+  }
+  render();
+}
+
+// ===================== RENDER =====================
+function render(){
+  renderBoard(); renderPlayerHand(); renderCpuHand();
+  // Mobile scores
+  document.getElementById('player-score').textContent=state.playerScore;
+  document.getElementById('cpu-score').textContent=state.cpuScore;
+  document.getElementById('deck-cnt').textContent=state.deck.length;
+  // Desktop scores
+  document.getElementById('player-score-d').textContent=state.playerScore;
+  document.getElementById('cpu-score-d').textContent=state.cpuScore;
+  document.getElementById('deck-cnt-d').textContent=state.deck.length;
+  // Buttons
+  const disabled=state.turn!=='player'||!state.placedThisTurn||!!state.bumped||state.resolving||state.gameOver;
+  const btn=document.getElementById('end-turn-btn');
+  btn.textContent=T.endTurn; btn.disabled=disabled;
+  const btnS=document.getElementById('end-turn-btn-side');
+  btnS.textContent=T.endTurn; btnS.disabled=disabled;
+  // Labels
+  document.getElementById('cpu-label').textContent=T.cpuCards;
+  document.getElementById('player-label').textContent=T.yourCards;
+}
+function renderBoard(){
+  const board=document.getElementById('board'); board.innerHTML='';
+  for(let i=0;i<81;i++){
+    const r=Math.floor(i/9),c=i%9;
+    const cell=document.createElement('div');
+    cell.className='cell';
+    if(c===2||c===5) cell.classList.add('box-right');
+    if(r===2||r===5) cell.classList.add('box-bottom');
+    cell.dataset.idx=i;
+    cell.addEventListener('mouseover',onHover);
+    cell.addEventListener('mouseout',onOut);
+    if(state.board[i]){
+      const s=state.board[i];
+      const card=document.createElement('div');
+      card.className=`board-card v${s.value} ${s.owner==='player'?'player-card':'cpu-card'}${s.locked?' locked':''}`;
+      card.textContent=s.value;
+      if(!s.locked){
+        card.addEventListener('mousedown',e=>{e.preventDefault();startDragBoard(e,i);});
+        card.addEventListener('touchstart',e=>{e.preventDefault();startDragBoard(e,i);},{passive:false});
+      }
+      cell.appendChild(card);
+    }
+    board.appendChild(cell);
+  }
+}
+function onHover(e){
+  if(!dragState.active) return;
+  const cell=e.currentTarget,ti=parseInt(cell.dataset.idx); clearHl();
+  const fi=dragState.boardIdx;
+  const tmp=fi>=0?state.board[fi]:null;
+  if(fi>=0) state.board[fi]=null;
+  const occupant=state.board[ti];
+  let ok=false;
+  if(!occupant){
+    ok=canPlace(ti,dragState.value);
+  } else if(!occupant.locked){
+    state.board[ti]=null;
+    ok=canPlace(ti,dragState.value);
+    state.board[ti]=occupant;
+  }
+  if(fi>=0) state.board[fi]=tmp;
+  cell.classList.add(ok?'drop-ok':'drop-bad');
+}
+function onOut(e){ e.currentTarget.classList.remove('drop-ok','drop-bad'); }
+function renderPlayerHand(){
+  const h=document.getElementById('player-hand'); h.innerHTML='';
+  state.playerHand.forEach((v,i)=>{
+    const c=document.createElement('div');
+    c.className=`hand-card v${v}`; c.textContent=v;
+    // Disable hand cards while bumped card needs placing
+    if(state.turn==='player'&&!state.gameOver&&!state.bumped){
+      c.addEventListener('mousedown',e=>{e.preventDefault();startDragHand(e,i);});
+      c.addEventListener('touchstart',e=>{e.preventDefault();startDragHand(e,i);},{passive:false});
+    } else if(state.bumped){
+      c.style.opacity='0.4';
+    }
+    h.appendChild(c);
+  });
+  // Render bumped slot
+  const slot=document.getElementById('bumped-slot');
+  const bcard=document.getElementById('bumped-card');
+  if(state.bumped){
+    document.getElementById('bumped-label').textContent=T.bumpedLabel;
+    slot.style.display='flex';
+    bcard.innerHTML='';
+    const bc=document.createElement('div');
+    bc.className=`bumped-card v${state.bumped.value}`; bc.textContent=state.bumped.value;
+    bc.addEventListener('mousedown',e=>{e.preventDefault();startDragBumped(e);});
+    bc.addEventListener('touchstart',e=>{e.preventDefault();startDragBumped(e);},{passive:false});
+    bcard.appendChild(bc);
+  } else {
+    slot.style.display='none';
+    bcard.innerHTML='';
+  }
+}
+function renderCpuHand(){
+  const h=document.getElementById('computer-hand'); h.innerHTML='';
+  state.cpuHand.forEach(()=>{
+    const c=document.createElement('div');
+    c.className='cpu-hand-card'; c.textContent='🂠'; h.appendChild(c);
+  });
+}
+
+// ===================== STATUS & LOG =====================
+function setStatus(msg,type=''){
+  const c=type||'';
+  document.getElementById('status-bar').textContent=msg;
+  document.getElementById('status-bar').className=c;
+  document.getElementById('status-bar-side').textContent=msg;
+  document.getElementById('status-bar-side').className=c;
+}
+function addLog(msg){
+  // Mobile log
+  const log=document.getElementById('log');
+  const d=document.createElement('div'); d.textContent=msg; log.prepend(d);
+  while(log.children.length>25) log.removeChild(log.lastChild);
+  // Desktop log
+  const logS=document.getElementById('log-side');
+  const d2=document.createElement('div'); d2.textContent=msg; logS.prepend(d2);
+  while(logS.children.length>25) logS.removeChild(logS.lastChild);
+}
+
+// ===================== EVENTS =====================
+document.addEventListener('mousemove',e=>{if(dragState.active)movGhost(e);});
+document.addEventListener('mouseup',endDrag);
+document.addEventListener('touchmove',e=>{if(dragState.active){e.preventDefault();movGhost(e);}},{passive:false});
+document.addEventListener('touchend',endDrag);
+document.getElementById('end-turn-btn').addEventListener('click',endPlayerTurn);
+document.getElementById('end-turn-btn-side').addEventListener('click',endPlayerTurn);
+document.getElementById('restart-btn').addEventListener('click',initGame);
+
+// ===================== START =====================
+initGame();
+</script>
+</body>
+</html>
