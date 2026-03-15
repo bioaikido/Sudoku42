@@ -1,1 +1,1 @@
-Sudoku 9x9
+Sudoku 42
