@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="manifest" href="/Sudoku42/manifest_hawaiian.json">
-<link rel="apple-touch-icon" href="/Sudoku42/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="32x32" href="/Sudoku42/icons/favicon-32x32.png">
+<link rel="manifest" href="manifest_hawaiian.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,6 +26,21 @@
     --gold: #f5c842;
     --locked: #b8dce8;
   }
+
+  #lang-switcher {
+    position:fixed; top:14px; right:16px; z-index:50;
+    display:flex; gap:4px;
+    background:rgba(255,255,255,0.12); backdrop-filter:blur(8px);
+    border-radius:20px; padding:4px; border:1px solid rgba(255,255,255,0.2);
+  }
+  .lang-btn {
+    padding:4px 12px; border-radius:16px; border:none;
+    background:transparent; color:rgba(255,255,255,0.6);
+    font-family:'Nunito',sans-serif; font-size:0.8rem; font-weight:700;
+    cursor:pointer; transition:background 0.2s,color 0.2s;
+  }
+  .lang-btn.active{ background:var(--gold); color:#333; }
+  .lang-btn:hover:not(.active){ color:#fff; }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -405,20 +420,25 @@
 </style>
 </head>
 <body>
+<div id="lang-switcher">
+  <button class="lang-btn active" onclick="setLang('ru')">RU</button>
+  <button class="lang-btn" onclick="setLang('en')">EN</button>
+</div>
+
 <div id="app">
-  <h1>🌺 Гавайское Судоку</h1>
+  <h1 id="h1-title">🌺 Гавайское Судоку</h1>
 
   <div id="scoreboard">
     <div class="score-item">
-      <div class="score-label">🌿 Вы</div>
+      <div class="score-label" id="label-you">🌿 Вы</div>
       <div class="score-val player" id="player-score">0</div>
     </div>
     <div class="score-item" style="border-left:1px solid rgba(255,255,255,0.2);border-right:1px solid rgba(255,255,255,0.2);padding:0 24px">
-      <div class="score-label">🃏 Колода</div>
+      <div class="score-label" id="label-deck">🃏 Колода</div>
       <div class="score-val" id="deck-cnt" style="color:#fff">10</div>
     </div>
     <div class="score-item">
-      <div class="score-label">🤖 Компьютер</div>
+      <div class="score-label" id="label-cpu">🤖 Компьютер</div>
       <div class="score-val computer" id="computer-score">0</div>
     </div>
   </div>
@@ -430,10 +450,10 @@
     <!-- Левая колонка: компьютер -->
     <div id="computer-area">
       <div id="cpu-score-panel" class="side-panel">
-        <div class="score-label">🤖 Компьютер</div>
+        <div class="score-label" id="label-cpu-d">🤖 Компьютер</div>
         <div class="score-val" style="color:#ff8fa3" id="computer-score-d">0</div>
         <div class="score-sep"></div>
-        <div class="score-label">🃏 Колода</div>
+        <div class="score-label" id="label-deck-d">🃏 Колода</div>
         <div class="score-val" style="color:#fff" id="deck-cnt-d">10</div>
       </div>
       <div id="computer-label" style="color:rgba(255,255,255,0.65);font-size:0.7rem;text-transform:uppercase;letter-spacing:1.5px">Карты компьютера</div>
@@ -450,7 +470,7 @@
     <!-- Правая колонка: игрок -->
     <div id="player-area">
       <div id="player-score-panel" class="side-panel">
-        <div class="score-label">🌿 Вы</div>
+        <div class="score-label" id="label-you-d">🌿 Вы</div>
         <div class="score-val" style="color:#7effc0" id="player-score-d">0</div>
       </div>
       <div id="status-bar-side">Выберите карту</div>
@@ -482,6 +502,104 @@
 </div>
 
 <script>
+// ===================== I18N =====================
+const LANG = {
+  ru: {
+    title: '🌺 Гавайское Судоку',
+    labelYou: '🌿 Вы', labelDeck: '🃏 Колода', labelCpu: '🤖 Компьютер',
+    cpuCards: 'Карты компьютера', yourCards: 'Ваши карты',
+    endTurn: 'Завершить ход ➜', restartBtn: '🌺 Играть снова',
+    statusStart: '🌺 Ваш ход! Перетащите карту из руки на поле',
+    statusYourTurn: '🌺 Ваш ход!',
+    statusThinking: '🤖 Компьютер думает...',
+    statusPlaced: 'Карта выложена. Перемещайте карты или завершите ход ➜',
+    statusAlreadyPlaced: '⚠️ Вы уже выложили карту в этот ход. Завершите ход или переместите карты.',
+    statusInvalid: '⛔ Нельзя поставить сюда — нарушение правил!',
+    statusConflictMode: '⚠️ Нет допустимых ячеек — конфликтный режим. Выберите любую пустую ячейку в другом квадрате.',
+    statusConflictPlaced: '🔧 Размещено с конфликтом. Разрешаю...',
+    statusConflictInvalid: '⛔ Нельзя — в этом квадрате уже есть такое значение!',
+    statusNoCards: '🌿 У вас нет карт — ход переходит к компьютеру',
+    statusCpuCant: '🤖 Компьютер не смог выложить карту',
+    statusPreview: (msgs, pts) => `✨ Закроете: ${msgs.join(', ')} (+${pts} очко${pts>1?'к':''})! Нажмите «Завершить ход» ➜`,
+    statusBonus: (pts) => `🌺 +${pts}! Дополнительный ход!`,
+    statusCpuBonus: (pts) => `🤖 +${pts} — компьютер ходит снова!`,
+    logYouPlaced: (v,i) => `🌿 Вы положили ${v} на клетку ${i}`,
+    logCpuPlaced: (v,i) => `🤖 Компьютер положил ${v} на клетку ${i}`,
+    logCpuMoved: (v,f,t) => `🤖 Компьютер переставил ${v} с клетки ${f} → ${t}`,
+    logYouClosed: (m) => `🌿 Вы закрыли ${m} +1 очко`,
+    logCpuClosed: (m) => `🤖 Компьютер закрыл ${m} +1 очко`,
+    logConflict: (v,f,t) => `🔧 Конфликт: ${v} ${f}→${t}`,
+    logConflictCpu: (v,i) => `⚠️ Компьютер: конфликтное размещение ${v} → клетка ${i}`,
+    gQuad: (n) => `квадрат ${n} 🟦`, gRow: (n) => `строку ${n} ➡️`, gCol: (n) => `колонку ${n} ⬇️`,
+    winTitle: '🌺 Вы победили!', loseTitle: '🍺 Компьютер победил!', drawTitle: '🤝 Ничья!',
+    winDancers: '💃🌸💃🌺💃🌸💃', loseDancers: '🕺🍺🕺🍺🕺🍺🕺', drawDancers: '💃🕺💃🕺💃🕺💃',
+    winText: 'Тропические красавицы танцуют в вашу честь!',
+    loseText: 'Пузатые гавайские джентльмены насмехаются...',
+    drawText: 'Все вместе танцуют хулу!',
+    scoreText: (p,c) => `Ваши очки: ${p} | Компьютер: ${c}`,
+  },
+  en: {
+    title: '🌺 Hawaiian Sudoku',
+    labelYou: '🌿 You', labelDeck: '🃏 Deck', labelCpu: '🤖 Computer',
+    cpuCards: "Computer's cards", yourCards: 'Your cards',
+    endTurn: 'End Turn ➜', restartBtn: '🌺 Play Again',
+    statusStart: '🌺 Your turn! Drag a card to the board',
+    statusYourTurn: '🌺 Your turn!',
+    statusThinking: '🤖 Computer is thinking...',
+    statusPlaced: 'Card placed. Rearrange or end turn ➜',
+    statusAlreadyPlaced: '⚠️ Already placed a card. End turn or rearrange.',
+    statusInvalid: '⛔ Cannot place here — rule violation!',
+    statusConflictMode: '⚠️ No valid cells — conflict mode. Pick any empty cell in a different box.',
+    statusConflictPlaced: '🔧 Placed with conflict. Resolving...',
+    statusConflictInvalid: '⛔ Cannot — this value already exists in this box!',
+    statusNoCards: "🌿 No cards — computer\'s turn",
+    statusCpuCant: '🤖 Computer could not place a card',
+    statusPreview: (msgs, pts) => `✨ Will close: ${msgs.join(', ')} (+${pts})! End turn ➜`,
+    statusBonus: (pts) => `🌺 +${pts}! Bonus turn!`,
+    statusCpuBonus: (pts) => `🤖 +${pts} — computer plays again!`,
+    logYouPlaced: (v,i) => `🌿 You placed ${v} on cell ${i}`,
+    logCpuPlaced: (v,i) => `🤖 Computer placed ${v} on cell ${i}`,
+    logCpuMoved: (v,f,t) => `🤖 Computer moved ${v} from cell ${f} → ${t}`,
+    logYouClosed: (m) => `🌿 You closed ${m} +1`,
+    logCpuClosed: (m) => `🤖 Computer closed ${m} +1`,
+    logConflict: (v,f,t) => `🔧 Conflict: ${v} ${f}→${t}`,
+    logConflictCpu: (v,i) => `⚠️ Computer: conflict placement ${v} → cell ${i}`,
+    gQuad: (n) => `box ${n} 🟦`, gRow: (n) => `row ${n} ➡️`, gCol: (n) => `col ${n} ⬇️`,
+    winTitle: '🌺 You Won!', loseTitle: '🍺 Computer Won!', drawTitle: '🤝 Draw!',
+    winDancers: '💃🌸💃🌺💃🌸💃', loseDancers: '🕺🍺🕺🍺🕺🍺🕺', drawDancers: '💃🕺💃🕺💃🕺💃',
+    winText: 'Tropical beauties dance in your honor!',
+    loseText: 'Chubby Hawaiian gentlemen are laughing...',
+    drawText: 'Everyone does the hula together!',
+    scoreText: (p,c) => `Your score: ${p} | Computer: ${c}`,
+  },
+};
+
+let lang = 'ru';
+let T = LANG[lang];
+
+function setLang(l) {
+  lang = l; T = LANG[l];
+  document.documentElement.lang = l;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent === l.toUpperCase()));
+  applyStatic();
+  render();
+}
+
+function applyStatic() {
+  document.title = T.title;
+  document.getElementById('h1-title').textContent = T.title;
+  document.getElementById('label-you').textContent = T.labelYou;
+  document.getElementById('label-deck').textContent = T.labelDeck;
+  document.getElementById('label-cpu').textContent = T.labelCpu;
+  document.getElementById('label-you-d').textContent = T.labelYou;
+  document.getElementById('label-deck-d').textContent = T.labelDeck;
+  document.getElementById('computer-label').textContent = T.cpuCards;
+  document.getElementById('player-label').textContent = T.yourCards;
+  document.getElementById('end-turn-btn').textContent = T.endTurn;
+  document.getElementById('end-turn-btn-side').textContent = T.endTurn;
+  document.getElementById('restart-btn').textContent = T.restartBtn;
+}
+
 // ===================== STATE =====================
 const state = {
   deck: [],
@@ -520,8 +638,9 @@ function initGame() {
   state.resolving = false;
   state.gameOver = false;
   document.getElementById('overlay').classList.remove('show');
+  applyStatic();
   render();
-  setStatus('🌺 Ваш ход! Перетащите карту из руки на поле');
+  setStatus(T.statusStart);
 }
 
 function shuffle(arr) {
@@ -728,7 +847,7 @@ async function resolveConflicts(placedIdx) {
     const occ  = state.board[toIdx];
     state.board[victim] = occ || null;
     state.board[toIdx]  = card;
-    addLog(`🔧 Конфликт: ${card.value}${occ?'↔'+occ.value:''} ${victim+1}→${toIdx+1}`);
+    addLog(T.logConflict(occ?`${card.value}↔${occ.value}`:card.value, victim+1, toIdx+1));
     return { moved:true, toIdx, occValue: occ ? occ.value : null };
   }
 
@@ -782,9 +901,9 @@ async function resolveConflicts(placedIdx) {
 }
 // Конфликтное размещение из руки
 function playerPlaceConflict(handIdx, boardIdx) {
-  if(state.placedThisTurn) { setStatus('⚠️ Вы уже выложили карту.','warn'); return false; }
+  if(state.placedThisTurn) { setStatus(T.statusAlreadyPlaced,'warn'); return false; }
   const v = state.playerHand[handIdx];
-  if(!conflictAllowedCell(boardIdx, v)) { setStatus('⛔ Нельзя — в этом квадрате уже есть такое значение!','warn'); return false; }
+  if(!conflictAllowedCell(boardIdx, v)) { setStatus(T.statusConflictInvalid,'warn'); return false; }
   state.board[boardIdx] = {value:v, owner:'player', locked:false};
   state.playerHand.splice(handIdx,1);
   state.placedThisTurn = true;
@@ -793,7 +912,7 @@ function playerPlaceConflict(handIdx, boardIdx) {
   state.conflictMode = false;
   state.wasConflict = true;
   addLog(`⚠️ Конфликтное размещение: ${v} → клетка ${boardIdx+1}`);
-  setStatus('🔧 Размещено с конфликтом. Разрешаю...','warn');
+  setStatus(T.statusConflictPlaced,'warn');
   render();
   resolveConflicts(boardIdx).then(async () => {
     let safetyLimit = 20;
@@ -811,7 +930,7 @@ function playerPlaceConflict(handIdx, boardIdx) {
 // ===================== PLAYER PLACE =====================
 function playerPlace(handIdx, boardIdx) {
   if(state.placedThisTurn) {
-    setStatus('⚠️ Вы уже выложили карту в этот ход. Завершите ход или переместите карты.', 'warn');
+    setStatus(T.statusAlreadyPlaced,'warn');
     return false;
   }
   const value = state.playerHand[handIdx];
@@ -821,11 +940,11 @@ function playerPlace(handIdx, boardIdx) {
   if(!canPlace(boardIdx, value)) {
     if(!hasAnyValidCell(value)) {
       state.conflictMode = true;
-      setStatus('⚠️ Нет допустимых ячеек — конфликтный режим. Выберите любую пустую ячейку в другом квадрате.','warn');
+      setStatus(T.statusConflictMode,'warn');
       render();
       return playerPlaceConflict(handIdx, boardIdx);
     }
-    setStatus('⛔ Нельзя поставить сюда — нарушение правил!', 'warn');
+    setStatus(T.statusInvalid,'warn');
     return false;
   }
 
@@ -833,13 +952,13 @@ function playerPlace(handIdx, boardIdx) {
   state.playerHand.splice(handIdx,1);
   state.placedThisTurn = true;
   state.lastPlacedIdx = boardIdx;
-  addLog(`🌿 Вы положили ${value} на клетку ${boardIdx+1}`);
+  addLog(T.logYouPlaced(value, boardIdx+1));
 
   const {points, msgs} = scoreForPlacement(boardIdx);
   if(points > 0) {
-    setStatus(`✨ Закроете: ${msgs.join(', ')} (+${points} очко${points>1?'к':''})! Нажмите «Завершить ход» ➜`, 'good');
+    setStatus(T.statusPreview(msgs, points), 'good');
   } else {
-    setStatus('Карта выложена. Перемещайте карты или завершите ход ➜');
+    setStatus(T.statusPlaced);
   }
   render();
   return true;
@@ -854,16 +973,16 @@ function computerTurn() {
     state.placedThisTurn = false;
     render();
     checkGameOver();
-    if(!state.gameOver) setStatus('🌺 Ваш ход!');
+    if(!state.gameOver) setStatus(T.statusYourTurn);
     return;
   }
 
-  setStatus('🤖 Компьютер думает...');
+  setStatus(T.statusThinking);
   setTimeout(() => {
     const placed = doComputerPlace();
     if(placed === 'conflict') return; // finishComputerTurn вызовется из resolveConflicts.then()
     if(!placed) {
-      addLog('🤖 Компьютер не смог выложить карту');
+      addLog(T.statusCpuCant);
       finishComputerTurn(0);
       return;
     }
@@ -883,13 +1002,13 @@ function doComputerPlace() {
     const movedCard = state.board[moveFrom];
     state.board[moveTo] = movedCard;
     state.board[moveFrom] = null;
-    addLog(`🤖 Компьютер переставил ${movedCard.value} с клетки ${moveFrom+1} → ${moveTo+1}`);
+    addLog(T.logCpuMoved(movedCard.value, moveFrom+1, moveTo+1));
 
     const value = state.computerHand[handIdx];
     state.board[boardIdx] = {value, owner:'computer', locked:false};
     state.computerHand.splice(handIdx,1);
     state.computerLastPlaced = boardIdx;
-    addLog(`🤖 Компьютер положил ${value} на клетку ${boardIdx+1}`);
+    addLog(T.logCpuPlaced(value, boardIdx+1));
     return true;
   }
 
@@ -911,7 +1030,7 @@ function doComputerPlace() {
   state.board[boardIdx] = {value, owner:'computer', locked:false};
   state.computerHand.splice(handIdx,1);
   state.computerLastPlaced = boardIdx;
-  addLog(`🤖 Компьютер положил ${value} на клетку ${boardIdx+1}`);
+  addLog(T.logCpuPlaced(value, boardIdx+1));
   return true;
 }
 
@@ -925,7 +1044,7 @@ function doComputerPlaceConflict() {
       state.computerLastPlaced = bi;
       state.resolving = true;
       render();
-      addLog(`⚠️ Компьютер: конфликтное размещение ${v} → клетка ${bi+1}`);
+      addLog(T.logConflictCpu(v, bi+1));
       resolveConflicts(bi).then(async () => {
         let safetyLimit = 20;
         while(hasBoardConflicts() && safetyLimit-- > 0){
@@ -953,7 +1072,7 @@ function applyScoreAndLock(boardIdx, who) {
     tolock.forEach(i=>{ if(state.board[i]) state.board[i].locked = true; });
     if(who==='player') state.playerScore += points;
     else state.computerScore += points;
-    msgs.forEach(m => addLog(`${who==='player'?'🌿 Вы закрыли':'🤖 Компьютер закрыл'} ${m} +1 очко`));
+    msgs.forEach(m => addLog(who==='player' ? T.logYouClosed(m) : T.logCpuClosed(m)));
     showPointFlash(points);
   }
   return points;
@@ -968,7 +1087,7 @@ function finishComputerTurn(pts) {
     state.placedThisTurn = false;
     render();
     checkGameOver();
-    if(!state.gameOver) setStatus('🌺 Ваш ход!');
+    if(!state.gameOver) setStatus(T.statusYourTurn);
   } else {
     // Бонусный ход — но только если есть карты
     if(state.computerHand.length === 0 && state.deck.length === 0) {
@@ -976,10 +1095,10 @@ function finishComputerTurn(pts) {
       state.placedThisTurn = false;
       render();
       checkGameOver();
-      if(!state.gameOver) setStatus('🌺 Ваш ход!');
+      if(!state.gameOver) setStatus(T.statusYourTurn);
       return;
     }
-    setStatus(`🤖 Компьютер получил +${pts} и ходит ещё!`, 'warn');
+    setStatus(T.statusCpuBonus(pts), 'warn');
     render();
     setTimeout(()=>computerTurn(), 1200);
   }
@@ -1137,7 +1256,7 @@ function checkGameOver() {
 
   // Если сейчас ход игрока, но карт нет — авто-передача компьютеру
   if(state.turn==='player' && state.playerHand.length===0 && state.deck.length===0) {
-    addLog('🌿 У вас нет карт — ход переходит к компьютеру');
+    addLog(T.statusNoCards);
     state.turn = 'computer';
     state.placedThisTurn = false;
     render();
@@ -1154,19 +1273,19 @@ function showEndGame() {
   const danceText = document.getElementById('dance-text');
 
   if(ps > cs) {
-    title.textContent = '🌺 Вы победили!';
-    dancers.textContent = '💃🌸💃🌺💃🌸💃';
-    danceText.textContent = 'Тропические красавицы танцуют в вашу честь!';
+    title.textContent = T.winTitle;
+    dancers.textContent = T.winDancers;
+    danceText.textContent = T.winText;
   } else if(cs > ps) {
-    title.textContent = '🍺 Компьютер победил!';
-    dancers.textContent = '🕺🍺🕺🍺🕺🍺🕺';
-    danceText.textContent = 'Пузатые гавайские джентльмены насмехаются...';
+    title.textContent = T.loseTitle;
+    dancers.textContent = T.loseDancers;
+    danceText.textContent = T.loseText;
   } else {
-    title.textContent = '🤝 Ничья!';
-    dancers.textContent = '💃🕺💃🕺💃🕺💃';
-    danceText.textContent = 'Все вместе танцуют хулу!';
+    title.textContent = T.drawTitle;
+    dancers.textContent = T.drawDancers;
+    danceText.textContent = T.drawText;
   }
-  scoreEl.textContent = `Ваши очки: ${ps} | Компьютер: ${cs}`;
+  scoreEl.textContent = T.scoreText(ps,cs);
   overlay.classList.add('show');
 }
 
@@ -1179,7 +1298,7 @@ function startDragFromHand(e, handIdx) {
   const v = state.playerHand[handIdx];
   if(!state.conflictMode && !hasAnyValidCell(v)) {
     state.conflictMode = true;
-    setStatus('⚠️ Нет допустимых ячеек — конфликтный режим. Выберите любую пустую ячейку в другом квадрате.','warn');
+    setStatus(T.statusConflictMode,'warn');
   }
   dragState = {active:true, source:'hand', handIdx, boardIdx:-1, value:v};
   ghost.textContent = v;
@@ -1412,7 +1531,7 @@ initGame();
 <script>
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/Sudoku42/sw_hawaiian.js');
+    navigator.serviceWorker.register('./sw_hawaiian.js');
   });
 }
 </script>
