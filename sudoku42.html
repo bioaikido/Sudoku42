@@ -1951,6 +1951,14 @@ const GameWS = {
     this.ws = null; this.connected = false; this.reconnectAttempts = 0;
   },
 
+  reconnectIfNeeded() {
+    if (!this._gameId || !this._userId) return;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+    this.reconnectAttempts = 0;
+    if (this.ws) { this.ws.onclose = null; this.ws.close(); }
+    this._doConnect();
+  },
+
   _handleMessage(msg) {
     const type = msg.type;
     const data = msg.data;
@@ -1960,6 +1968,23 @@ const GameWS = {
     if (this.handlers[key]) this.handlers[key](data);
   }
 };
+
+// ── Reconnect WebSocket & sync state on foreground return ──
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (state.mode !== 'online' || !state.onlineState?.gameId || state.gameOver) return;
+
+  GameWS.reconnectIfNeeded();
+
+  // Sync game state to catch up on missed moves
+  GameAPI.getStatus()
+    .then(status => {
+      StateConverter.applyFullState(status);
+      render();
+      setStatus(state.isMyTurn ? (T.statusYourTurn || T.statusStart) : (T.statusOpponentTurn || T.statusThinking));
+    })
+    .catch(() => {});
+});
 
 // ===================== STATE CONVERTER =====================
 const StateConverter = {
